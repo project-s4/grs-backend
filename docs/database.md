@@ -68,17 +68,17 @@ Alembic is used to manage database schema changes. The configuration is in `alem
 *   **Generate a new migration:**
 
     ```bash
-alembic revision --autogenerate -m "Your migration message"
+    alembic revision --autogenerate -m "Your migration message"
     ```
 
 *   **Apply migrations:**
 
     ```bash
-alembic upgrade head
+    alembic upgrade head
     ```
 
 *   **Revert migrations:**
 
     ```bash
-alembic downgrade -1 # Reverts the last migration
+    alembic downgrade -1 # Reverts the last migration
     ```
