@@ -93,7 +93,7 @@ env.bak/
 venv.bak/
 
 # Docker
-docker-compose.yml
+
 
 # mypy
 .mypy_cache/
