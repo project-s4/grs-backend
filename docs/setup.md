@@ -25,14 +25,14 @@ We use Docker to run a PostgreSQL database. Ensure Docker and Docker Compose are
 
 1.  **Start the Database Container:**
 
-    ```bash
+```bash
 docker compose up -d
-    ```
+```
 
-    This will start a PostgreSQL container named `backend-db-1` with the following credentials:
-    *   **User:** `grievance_user`
-    *   **Password:** `strongpassword`
-    *   **Database:** `grievance_db`
+This will start a PostgreSQL container named `backend-db-1` with the following credentials:
+*   **User:** `grievance_user`
+*   **Password:** `strongpassword`
+*   **Database:** `grievance_db`
 
 2.  **Verify Database Connection:**
 
