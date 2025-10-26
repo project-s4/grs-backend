@@ -42,7 +42,7 @@ class Complaint(Base):
     __tablename__ = "complaints"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     reference_no = Column(String, unique=True, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=False)
     transcript = Column(Text, nullable=True)

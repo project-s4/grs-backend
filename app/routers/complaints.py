@@ -24,7 +24,8 @@ def create_complaint(payload: ComplaintCreate, db: Session = Depends(get_db)):
         category=payload.category,
         subcategory=payload.subcategory,
         department_id=department.id,
-        complaint_metadata=payload.complaint_metadata
+        complaint_metadata=payload.complaint_metadata,
+        user_id=None  # AI complaints may not have a user_id
     )
     db.add(complaint)
     db.commit()
