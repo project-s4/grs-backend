@@ -19,3 +19,12 @@ class ComplaintResponse(BaseModel):
     reference_no: str
     status: str
     department_id: uuid.UUID
+
+class ComplaintListResponse(BaseModel):
+    complaints: list
+    pagination: dict
+
+class ComplaintUpdate(BaseModel):
+    status: Optional[str] = None
+    admin_reply: Optional[str] = None
+    assigned_to: Optional[uuid.UUID] = None

@@ -28,6 +28,8 @@ class User(Base):
     role = Column(Enum(UserRole), default=UserRole.citizen)
     password_hash = Column(String, nullable=True)
     department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id"), nullable=True)
+    reset_token = Column(String, nullable=True)
+    reset_token_expiry = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Department(Base):
@@ -54,4 +56,6 @@ class Complaint(Base):
     status = Column(Enum(ComplaintStatus), default=ComplaintStatus.new)
     source = Column(String, default="web")
     complaint_metadata = Column(JSON, nullable=True)
+    admin_reply = Column(Text, nullable=True)
+    assigned_to = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
