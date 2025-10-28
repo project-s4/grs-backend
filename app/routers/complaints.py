@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Header
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from app.schemas.complaints import ComplaintCreate, ComplaintResponse, ComplaintUpdate
 from app.db.session import get_db
 from app.models.models import Complaint, Department, User, ComplaintStatus
-from app.core.security import get_current_user
+from app.core.security import get_current_user, decode_access_token
 import random
 from typing import Optional
 
@@ -74,11 +74,58 @@ def get_complaints(
     }
 
 @router.get("/complaints/track/{tracking_id}")
-def track_complaint(tracking_id: str, db: Session = Depends(get_db)):
+def track_complaint(
+    tracking_id: str, 
+    db: Session = Depends(get_db),
+    authorization: str = Header(None)  # Optional auth header
+):
     complaint = db.query(Complaint).filter(Complaint.reference_no == tracking_id).first()
     if not complaint:
         raise HTTPException(status_code=404, detail="Complaint not found")
-    return {"success": True, "complaint": complaint}
+    
+    # Get user information if user_id exists
+    user = None
+    if complaint.user_id:
+        user = db.query(User).filter(User.id == complaint.user_id).first()
+    
+    # If no user associated with complaint, try to get from auth token
+    if not user and authorization:
+        # Try to get token from Authorization header
+        if authorization.startswith("Bearer "):
+            token = authorization.split(" ")[1]
+            payload = decode_access_token(token)
+            if payload:
+                email = payload.get("sub")
+                if email:
+                    current_user = db.query(User).filter(User.email == email).first()
+                    if current_user:
+                        user = current_user
+    
+    # Get department information
+    department = db.query(Department).filter(Department.id == complaint.department_id).first()
+    
+    # Map to frontend expected format
+    mapped_complaint = {
+        "_id": str(complaint.id),
+        "trackingId": complaint.reference_no,
+        "name": user.name if user else "Anonymous",
+        "email": user.email if user else "N/A",
+        "phone": user.phone if user else None,
+        "department": department.name if department else "Unknown",
+        "category": complaint.category or "General",
+        "subCategory": complaint.subcategory,
+        "description": complaint.description,
+        "status": complaint.status.value if hasattr(complaint.status, 'value') else str(complaint.status),
+        "priority": complaint.complaint_metadata.get("priority", "Medium") if complaint.complaint_metadata else "Medium",
+        "dateFiled": complaint.created_at.isoformat() if complaint.created_at else None,
+        "reply": complaint.admin_reply,
+        "adminReply": complaint.admin_reply,
+        "updatedAt": complaint.created_at.isoformat() if complaint.created_at else None,  # Use created_at if no updated_at field
+        "viewCount": complaint.complaint_metadata.get("viewCount", 0) if complaint.complaint_metadata else 0,
+        "title": complaint.title
+    }
+    
+    return {"success": True, "complaint": mapped_complaint}
 
 @router.patch("/complaints/{complaint_id}")
 def update_complaint(

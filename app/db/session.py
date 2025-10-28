@@ -11,6 +11,9 @@ DATABASE_URL = os.getenv(
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# Export for use in other modules
+__all__ = ['engine', 'SessionLocal', 'get_db', 'DATABASE_URL']
+
 def get_db():
     db = SessionLocal()
     try:
