@@ -1,5 +1,9 @@
 from fastapi import FastAPI
+from dotenv import load_dotenv
 from app.routers import complaints, departments, ai, auth, admin
+
+# Load environment variables
+load_dotenv()
 
 app = FastAPI(title="Grievance Redressal Backend")
 

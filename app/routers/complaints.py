@@ -50,17 +50,107 @@ def get_complaints(
     db: Session = Depends(get_db)
 ):
     offset = (page - 1) * limit
-    query = db.query(Complaint)
+    # Join with Department and User tables to get related data
+    # Query status as text to avoid enum conversion issues
+    from sqlalchemy import text, cast, String
+    query = db.query(
+        Complaint.id,
+        Complaint.reference_no,
+        Complaint.title,
+        Complaint.description,
+        Complaint.category,
+        Complaint.complaint_metadata,
+        Complaint.created_at,
+        Complaint.department_id,
+        Complaint.user_id,
+        Complaint.assigned_to,
+        cast(Complaint.status, String).label('status_str'),
+        Department.name.label('department_name'),
+        User.name.label('user_name'),
+        User.email.label('user_email'),
+        User.phone.label('user_phone')
+    ).outerjoin(
+        Department, Complaint.department_id == Department.id
+    ).outerjoin(
+        User, Complaint.user_id == User.id
+    )
     
     if status:
-        query = query.filter(Complaint.status == status)
+        try:
+            # Handle different status formats from frontend
+            # Map frontend status values to enum values
+            status_mapping = {
+                "pending": "new",
+                "in progress": "in_progress",
+                "in-progress": "in_progress",
+                "resolved": "resolved"
+            }
+            
+            status_normalized = status.lower().replace(' ', '_').replace('-', '_')
+            # Try mapping first
+            enum_value = status_mapping.get(status_normalized, status_normalized)
+            
+            # Convert to enum
+            status_enum = ComplaintStatus[enum_value]
+            query = query.filter(Complaint.status == status_enum)
+        except (KeyError, ValueError) as e:
+            # If status is not a valid enum, skip filtering (return all)
+            # This prevents errors when invalid status is passed
+            pass
     if department_id:
         query = query.filter(Complaint.department_id == department_id)
     if user_id:
         query = query.filter(Complaint.user_id == user_id)
     
     total = query.count()
-    complaints = query.offset(offset).limit(limit).all()
+    results = query.offset(offset).limit(limit).all()
+    
+    # Format complaints to match admin dashboard expectations
+    complaints = []
+    for row in results:
+        # Unpack the query result
+        (complaint_id, reference_no, title, description, category, 
+         complaint_metadata, created_at, department_id, user_id, 
+         assigned_to, status_str, dept_name, user_name, user_email, user_phone) = row
+        # Get priority from metadata or default
+        priority = "Medium"
+        if complaint_metadata and isinstance(complaint_metadata, dict):
+            priority = complaint_metadata.get("priority", "Medium")
+        
+        # Use status_str from query (already converted to string)
+        status_enum_value = (status_str or "new").lower()
+        
+        # Map enum values to dashboard expectations
+        status_mapping = {
+            "new": "Pending",
+            "triaged": "Pending",
+            "in_progress": "In Progress",
+            "in-progress": "In Progress",  # Handle hyphenated version
+            "resolved": "Resolved",
+            "escalated": "Pending",
+            "closed": "Resolved"
+        }
+        status_value = status_mapping.get(status_enum_value, status_enum_value.title())
+        
+        complaint_dict = {
+            "id": str(complaint_id),
+            "tracking_id": reference_no or "",
+            "title": title or "",
+            "description": description or "",
+            "category": category or "General",
+            "priority": priority,
+            "status": status_value,
+            "department_id": str(department_id) if department_id else None,
+            "department_name": dept_name or "Unknown",
+            "user_name": user_name,
+            "user_email": user_email,
+            "email": user_email,
+            "phone": user_phone,
+            "assigned_to": str(assigned_to) if assigned_to else None,
+            "created_at": created_at.isoformat() if created_at else "",
+            "updated_at": created_at.isoformat() if created_at else ""  # Using created_at as fallback
+        }
+        complaints.append(complaint_dict)
     
     return {
         "success": True,
