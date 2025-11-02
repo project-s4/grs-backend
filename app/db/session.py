@@ -2,21 +2,21 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import os
 
-# Use environment variable if available, otherwise default to docker-compose settings
+# Use Supabase client instead of direct PostgreSQL connection
+from .supabase import get_supabase
+
+# Keep DATABASE_URL for Alembic migrations
 DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "postgresql+psycopg2://grievance_user:strongpassword@localhost:5432/grievance_db"
+    "DATABASE_URL",
+    "postgresql://postgres:password@db.hwlngdpexkgbtrzatfox.supabase.co:5432/postgres?sslmode=require"
 )
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Export for use in other modules
-__all__ = ['engine', 'SessionLocal', 'get_db', 'DATABASE_URL']
+# For Alembic migrations only
+engine = create_engine(DATABASE_URL, connect_args={"sslmode": "require"})
 
 def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    """Get Supabase client for database operations"""
+    return get_supabase()
+
+# Export for use in other modules
+__all__ = ['get_db', 'DATABASE_URL']

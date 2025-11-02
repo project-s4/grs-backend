@@ -4,26 +4,31 @@ This directory contains scripts to seed your database with dummy data for testin
 
 ## 🚀 Quick Start
 
-### Option 1: Interactive Script (Easiest)
+### Option 1: Using Environment File
 
 ```bash
 cd grs-backend
-./seed_database.sh
+# Copy and edit environment file
+cp env.example .env
+
+# Update DATABASE_URL in .env with your Supabase connection string
+# Get this from your Supabase project dashboard
+DATABASE_URL="postgresql://postgres:password@db.project-id.supabase.co:5432/postgres?sslmode=require"
+
+# Run migrations
+alembic upgrade head
+
+# Seed database
+python seed_db.py
 ```
 
-This script will:
-1. Ask you to choose your database setup
-2. Test the connection
-3. Run migrations (if needed)
-4. Seed the database with dummy data
-
-### Option 2: Manual
+### Option 2: Using Environment Variable
 
 ```bash
 cd grs-backend
 
-# Set your database connection
-export DATABASE_URL="postgresql+psycopg2://user:password@host:port/database"
+# Set database connection to your Supabase database
+export DATABASE_URL="postgresql://postgres:password@db.project-id.supabase.co:5432/postgres?sslmode=require"
 
 # Run migrations
 alembic upgrade head
@@ -35,8 +40,9 @@ python seed_db.py
 ## 📊 What Gets Created
 
 ### Departments
+
 - PW - Public Works
-- HD - Health Department  
+- HD - Health Department
 - ED - Education Department
 - TD - Transport Department
 - RD - Revenue Department
@@ -47,18 +53,22 @@ python seed_db.py
 ### Test Users
 
 #### Citizens (8 users)
+
 - All passwords: `password123`
 - Emails: rajesh@example.com, priya@example.com, etc.
 
 #### Department Users (8 users)
+
 - All passwords: `dept123`
 - One user per department
 
 #### Admin Users (2 users)
+
 - admin@example.com / `admin123`
 - superadmin@example.com / `superadmin123`
 
 ### Sample Complaints
+
 - 10 test complaints across different departments
 - Various statuses and categories
 
@@ -77,15 +87,25 @@ python test_db_connection.py
 ### Common Issues
 
 **Connection refused**
-- Make sure PostgreSQL is running
-- Check port number (5432 or 5433)
 
-**Password authentication failed**  
-- Verify credentials
-- Check if database user exists
+- Check your internet connection
+- Verify Supabase project is active
+- Ensure database URL is correct
+
+**SSL required**
+
+- Make sure to include `?sslmode=require` in connection URL
+- Check SSL certificate settings
+
+**Password authentication failed**
+
+- Verify Supabase credentials
+- Check if IP is allowed in project settings
 
 **Tables don't exist**
+
 - Run: `alembic upgrade head`
+- Check Supabase database permissions
 
 ## 📁 Files
 
@@ -93,4 +113,3 @@ python test_db_connection.py
 - `seed_database.sh` - Interactive script
 - `test_db_connection.py` - Connection tester
 - `SEED_INSTRUCTIONS.md` - Detailed guide
-
