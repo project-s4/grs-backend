@@ -48,12 +48,21 @@ If you encounter `undefined symbol: _PyInterpreterState_Get` errors with psycopg
 ## Environment Variables Required
 
 Set these in Render dashboard:
-- `DATABASE_URL` - PostgreSQL connection string
+- `DATABASE_URL` - PostgreSQL connection string (Supabase format: `postgresql://postgres:PASSWORD@db.PROJECT_ID.supabase.co:5432/postgres?sslmode=require`)
 - `SECRET_KEY` - Application secret key
 - `JWT_SECRET` - JWT token secret
 - `GEMINI_API_KEY` - Gemini AI API key
 - `SUPABASE_URL` - Supabase project URL (if using)
 - `SUPABASE_ANON_KEY` - Supabase anonymous key (if using)
+
+### Database Connection Note
+
+If you encounter "Network is unreachable" errors with Supabase, it may be due to IPv6 connectivity issues on Render. The code has been updated to:
+- Add connection timeouts
+- Prefer IPv4 connections
+- Use connection pooling
+
+If issues persist, verify your `DATABASE_URL` is correctly set in Render dashboard environment variables.
 
 ## After Deployment
 
