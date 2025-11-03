@@ -19,8 +19,8 @@ if database_url and "sslmode=" not in database_url:
     separator = "&" if "?" in database_url else "?"
     database_url = f"{database_url}{separator}sslmode=require"
 elif not database_url:
-    # No fallback - DATABASE_URL must be set in environment
-    raise ValueError("DATABASE_URL environment variable is not set. Please configure it in your deployment environment.")
+    # Fallback default (you should set this in .env)
+    database_url = "postgresql://postgres:password@db.hwlngdpexkgbtrzatfox.supabase.co:5432/postgres?sslmode=require"
 
 # Force IPv4 for Render compatibility (IPv6 may not be supported)
 # Add connection parameters to prefer IPv4
