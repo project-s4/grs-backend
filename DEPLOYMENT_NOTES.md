@@ -62,7 +62,16 @@ If you encounter "Network is unreachable" errors with Supabase, it may be due to
 - Prefer IPv4 connections
 - Use connection pooling
 
-If issues persist, verify your `DATABASE_URL` is correctly set in Render dashboard environment variables.
+**IMPORTANT:** If your `DATABASE_URL` hostname resolves only to IPv6 (which Render cannot connect to), you need to use Supabase's connection pooler or IPv4-enabled endpoint. 
+
+**Solution:** In your Supabase dashboard:
+1. Go to Settings → Database
+2. Use the "Connection Pooler" connection string instead of the "Direct Connection" 
+3. The pooler connection string should use an IPv4-enabled hostname
+
+Alternatively, you can use Supabase's Transporter or set up IPv4 networking in Supabase.
+
+If issues persist, verify your `DATABASE_URL` is correctly set in Render dashboard environment variables and that it uses an IPv4-compatible endpoint.
 
 ## After Deployment
 
