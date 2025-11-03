@@ -1,73 +1,102 @@
-# Grievance Redressal Backend
+# Grievance Redressal System - Backend
 
-This repository contains the backend for a Grievance Redressal System, built using FastAPI, PostgreSQL, and JWT-based authentication. It provides a robust API for citizens, departments, administrators, and an AI service to manage and process grievances efficiently.
+FastAPI backend service for managing grievances, users, departments, and complaints with Supabase PostgreSQL database.
 
-## Features
-
-*   **FastAPI:** High-performance, easy-to-use web framework for building APIs.
-*   **PostgreSQL:** Reliable and powerful relational database.
-*   **SQLAlchemy ORM:** Pythonic way to interact with the database.
-*   **JWT Authentication:** Secure token-based authentication for all API interactions.
-*   **Alembic:** Database migration tool for managing schema changes.
-*   **Modular Design:** Well-organized project structure for maintainability and scalability.
-*   **Dedicated APIs:** Endpoints for user authentication, department management, complaint submission (citizen & AI), and administrative tasks.
-
-## Getting Started
-
-Follow these steps to get the project up and running on your local machine.
+## Quick Start
 
 ### Prerequisites
+- Python 3.8+
+- Supabase account (or PostgreSQL)
+- pip
 
-Ensure you have the following installed:
+### Setup
 
-*   [Docker](https://docs.docker.com/get-docker/) (for PostgreSQL database)
-*   [Python 3.8+](https://www.python.org/downloads/)
-*   [pip](https://pip.pypa.io/en/stable/installation/) (Python package installer)
+1. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### Quick Setup
+2. **Configure environment:**
+   ```bash
+   cp env.example .env
+   ```
+   
+   Edit `.env` and set:
+   ```env
+   DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@db.PROJECT_ID.supabase.co:5432/postgres?sslmode=require
+   SECRET_KEY=your-secret-key-here
+   JWT_SECRET=your-jwt-secret-key
+   ```
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/project-s4/grs-backend.git
-    cd grs-backend
-    ```
+3. **Run database migrations:**
+   ```bash
+   alembic upgrade head
+   ```
 
-2.  **Install Python dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+4. **Start the server:**
+   ```bash
+   ./run.sh
+   # Or: uvicorn app.main:app --reload --port 8001
+   ```
 
-3.  **Start the PostgreSQL database using Docker Compose:**
-    ```bash
-    docker compose up -d
-    ```
+Server runs on: `http://localhost:8001`
 
-4.  **Run database migrations:**
-    ```bash
-    alembic upgrade head
-    ```
+API docs: `http://localhost:8001/docs`
 
-5.  **Start the FastAPI application:**
-    ```bash
-    uvicorn app.main:app --reload
-    ```
-    The API will be available at `http://127.0.0.1:8000`.
+## Environment Variables
 
-For more detailed setup instructions, including troubleshooting and environment configuration, please refer to the [Setup Guide](./docs/setup.md).
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `DATABASE_URL` | PostgreSQL connection string (Supabase) | Yes |
+| `SECRET_KEY` | Application secret key | Yes |
+| `JWT_SECRET` | JWT token secret | Yes |
+| `JWT_ALGORITHM` | JWT algorithm (default: HS256) | No |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token expiry (default: 60) | No |
 
 ## API Endpoints
 
-The backend exposes several API endpoints for different functionalities:
-
-*   **Authentication:** Register users, log in, and obtain JWT tokens. See [Authentication Documentation](./docs/authentication.md).
-*   **Departments:** Manage departmental information. See [Departments Documentation](./docs/departments.md).
-*   **Complaints:** Submit and manage grievances. See [Complaints Documentation](./docs/complaints.md).
-*   **AI Service:** Internal endpoint for AI-driven complaint submission. See [AI Service Documentation](./docs/ai_service.md).
+- **Authentication**: `/api/register`, `/api/login`, `/api/me`
+- **Complaints**: `/api/complaints` (GET, POST, PATCH, DELETE)
+- **Departments**: `/api/departments` (GET, POST)
+- **Admin**: `/api/admin/analytics`, `/api/admin/users`
 
 ## Database
 
-Information about the database schema, models, and Alembic migrations can be found in the [Database Documentation](./docs/database.md).
+Uses Supabase PostgreSQL with SQLAlchemy ORM. See `app/models/models.py` for schema.
 
-## Full Documentation
+### Seeding Data
 
-For a complete overview of the project, including detailed API specifications, setup guides, and architectural decisions, please visit the [Full Documentation](./docs/README.md).
+```bash
+python seed_db.py
+```
+
+Creates sample departments, users, and complaints for testing.
+
+## Project Structure
+
+```
+app/
+├── main.py           # FastAPI application
+├── models/          # SQLAlchemy models
+├── schemas/         # Pydantic schemas
+├── routers/         # API route handlers
+├── core/            # Security utilities
+└── db/              # Database configuration
+```
+
+## Development
+
+```bash
+# Run with auto-reload
+uvicorn app.main:app --reload --port 8001
+
+# Run tests
+pytest tests/
+```
+
+## Documentation
+
+- [Authentication](./docs/authentication.md)
+- [Complaints API](./docs/complaints.md)
+- [Database Schema](./docs/database.md)
+- [Setup Guide](./docs/setup.md)
