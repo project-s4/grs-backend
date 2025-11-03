@@ -94,6 +94,45 @@ uvicorn app.main:app --reload --port 8001
 pytest tests/
 ```
 
+## Deployment on Render
+
+This application is ready to deploy on Render. The following files are configured:
+
+- `render.yaml` - Render service configuration
+- `Procfile` - Process file for Render
+- `runtime.txt` - Python version specification
+
+### Deploy Steps:
+
+1. **Push your code to GitHub/GitLab/Bitbucket**
+
+2. **Connect your repository to Render:**
+   - Go to [Render Dashboard](https://dashboard.render.com)
+   - Click "New +" → "Web Service"
+   - Connect your repository
+
+3. **Configure Environment Variables:**
+   Set the following environment variables in Render:
+   - `DATABASE_URL` - Your PostgreSQL connection string
+   - `SECRET_KEY` - Application secret key
+   - `JWT_SECRET` - JWT token secret
+   - `GEMINI_API_KEY` - Gemini AI API key
+   - `SUPABASE_URL` - Supabase project URL (if using Supabase)
+   - `SUPABASE_ANON_KEY` - Supabase anonymous key (if using Supabase)
+
+4. **Run Database Migrations:**
+   After deployment, run migrations via Render Shell:
+   ```bash
+   alembic upgrade head
+   ```
+
+5. **Deploy:**
+   Render will automatically detect the `render.yaml` file and configure the service.
+
+The app will be available at `https://your-service-name.onrender.com`
+
+Note: Render automatically sets the `PORT` environment variable, which is used by the Procfile.
+
 ## Documentation
 
 - [Authentication](./docs/authentication.md)
