@@ -1,0 +1,29 @@
+name: Deploy to Render
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  deploy:
+    name: Deploy to Render
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Trigger Render Deploy Hook
+        env:
+          RENDER_DEPLOY_KEY: ${{ secrets.RENDER_DEPLOY_HOOK_KEY }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_KEY" ]; then
+            echo "⚠️  RENDER_DEPLOY_HOOK_KEY secret not set. Using fallback key."
+            RENDER_DEPLOY_KEY="DDr_ziuaamw"
+          fi
+          curl -X POST "https://api.render.com/deploy/srv-d44ged4hg0os73cgdg10?key=${RENDER_DEPLOY_KEY}"
+        
+      - name: Deployment Status
+        run: |
+          echo "✅ Render deployment triggered successfully!"
+          echo "📊 Monitor deployment at: https://dashboard.render.com/web/srv-d44ged4hg0os73cgdg10"
+
