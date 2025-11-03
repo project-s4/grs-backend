@@ -2,7 +2,7 @@ services:
   - type: web
     name: grs-backend
     env: python
-    buildCommand: python3.12 -m pip install --upgrade pip && python3.12 -m pip install -r requirements.txt
+    buildCommand: bash build.sh || python3.12 -m pip install --upgrade pip && python3.12 -m pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL

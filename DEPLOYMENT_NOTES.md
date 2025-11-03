@@ -1,10 +1,22 @@
 # Deployment Notes for Render
 
-## Critical: Update Start Command
+## Critical: Update Build and Start Commands
 
-The Render service is currently configured with `./run.sh` as the start command, which uses a hardcoded port and won't work on Render.
+The Render service needs to be updated with the correct commands:
 
-**You MUST update the start command in the Render dashboard:**
+### 1. Update Build Command (to force Python 3.12)
+
+1. Go to: https://dashboard.render.com/web/srv-d44ged4hg0os73cgdg10
+2. Navigate to **Settings** → **Build Command**
+3. Change from: `pip install -r requirements.txt`
+4. Change to: `bash build.sh`
+   
+   OR explicitly use Python 3.12:
+   ```
+   python3.12 -m pip install --upgrade pip && python3.12 -m pip install -r requirements.txt
+   ```
+
+### 2. Update Start Command
 
 1. Go to: https://dashboard.render.com/web/srv-d44ged4hg0os73cgdg10
 2. Navigate to **Settings** → **Start Command**
@@ -17,10 +29,12 @@ Alternatively, delete the start command field entirely and let Render use the `P
 
 1. ✅ Updated `pydantic` to 2.8.2 (has pre-built wheels, avoids Rust compilation)
 2. ✅ Updated `SQLAlchemy` to 2.0.36 (compatible with Python 3.13)
-3. ✅ Updated `psycopg2-binary` to 2.9.10 (compatible with Python 3.13)
+3. ✅ Updated `psycopg2-binary` to 2.9.10 (works with Python 3.12, may need Python 3.12)
 4. ✅ Created `Procfile` with correct port binding
 5. ✅ Created `render.yaml` for Blueprint deployments
 6. ✅ Created `runtime.txt` for Python version specification (Python 3.12.10)
+7. ✅ Created `build.sh` script to force Python 3.12 usage
+8. ✅ Created `.python-version` file for pyenv support
 
 ## Python Version Note
 
