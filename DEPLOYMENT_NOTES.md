@@ -17,9 +17,19 @@ Alternatively, delete the start command field entirely and let Render use the `P
 
 1. ✅ Updated `pydantic` to 2.8.2 (has pre-built wheels, avoids Rust compilation)
 2. ✅ Updated `SQLAlchemy` to 2.0.36 (compatible with Python 3.13)
-3. ✅ Created `Procfile` with correct port binding
-4. ✅ Created `render.yaml` for Blueprint deployments
-5. ✅ Created `runtime.txt` for Python version specification
+3. ✅ Updated `psycopg2-binary` to 2.9.10 (compatible with Python 3.13)
+4. ✅ Created `Procfile` with correct port binding
+5. ✅ Created `render.yaml` for Blueprint deployments
+6. ✅ Created `runtime.txt` for Python version specification (Python 3.12.10)
+
+## Python Version Note
+
+If you encounter `undefined symbol: _PyInterpreterState_Get` errors with psycopg2, it means Render is using Python 3.13 but the package doesn't have wheels for it. 
+
+**Solution:** Ensure Python 3.12 is used:
+1. Go to Render Dashboard → Settings → Environment
+2. Verify that `runtime.txt` is being respected (should show Python 3.12.10)
+3. If not, you may need to manually set the Python version in the service settings
 
 ## Environment Variables Required
 
