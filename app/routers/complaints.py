@@ -19,6 +19,7 @@ def create_complaint(payload: ComplaintCreate, db: Session = Depends(get_db)):
     ref_no = f"COMP-{random.randint(100000, 999999)}"
     complaint = Complaint(
         reference_no=ref_no,
+        tracking_id=ref_no,  # Set tracking_id same as reference_no for database requirement
         title=payload.title,
         description=payload.description,
         transcript=payload.transcript,
@@ -228,11 +229,29 @@ def update_complaint(
         raise HTTPException(status_code=404, detail="Complaint not found")
     
     if update_data.status:
-        # Map string to enum
+        # Map string to enum - handle different status formats
+        status_mapping = {
+            "pending": "new",
+            "Pending": "new",
+            "new": "new",
+            "New": "new",
+            "in_progress": "in_progress",
+            "in-progress": "in_progress",
+            "In Progress": "in_progress",
+            "in progress": "in_progress",
+            "resolved": "resolved",
+            "Resolved": "resolved",
+            "triaged": "triaged",
+            "escalated": "escalated",
+            "closed": "closed",
+        }
+        
+        normalized_status = status_mapping.get(update_data.status, update_data.status)
+        
         try:
-            complaint.status = ComplaintStatus[update_data.status]
+            complaint.status = ComplaintStatus[normalized_status]
         except KeyError:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {update_data.status}")
+            raise HTTPException(status_code=400, detail=f"Invalid status: {update_data.status}. Valid values: {', '.join([s.name for s in ComplaintStatus])}")
     if update_data.admin_reply:
         complaint.admin_reply = update_data.admin_reply
     if update_data.assigned_to:
