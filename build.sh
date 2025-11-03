@@ -22,8 +22,15 @@ else
     fi
 fi
 
-# Show Python version
-$PYTHON_CMD --version
+# Show Python version and verify it's 3.12
+PYTHON_VERSION=$($PYTHON_CMD --version 2>&1 | grep -oP '3\.\d+' | head -1)
+echo "📌 Detected Python version: $PYTHON_VERSION"
+
+if [[ "$PYTHON_VERSION" != "3.12" ]]; then
+    echo "❌ ERROR: Python 3.12 is required but got version $PYTHON_VERSION"
+    echo "Render is using the wrong Python version. Please configure Render to use Python 3.12"
+    exit 1
+fi
 
 # Upgrade pip
 echo "📦 Upgrading pip..."
