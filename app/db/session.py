@@ -49,13 +49,17 @@ def convert_direct_to_pooler(database_url: str) -> str:
     # For now, default to ap-south-1 (can be overridden via env var)
     region = os.getenv("SUPABASE_POOLER_REGION", "ap-south-1")
     
-    # Build pooler connection string (session mode - port 5432)
+    # Build pooler connection string
+    # Try transaction mode first (port 6543) - more reliable for serverless
     # Username format: postgres.[PROJECT_REF]
     # Use postgresql:// protocol (SQLAlchemy compatible) - psycopg2 accepts both postgres:// and postgresql://
     pooler_hostname = f"aws-0-{region}.pooler.supabase.com"
     # URL encode password for safety
     encoded_password = urlquote(password, safe='')
-    pooler_url = f"postgresql://postgres.{project_ref}:{encoded_password}@{pooler_hostname}:5432{parsed.path or '/postgres'}"
+    
+    # Try transaction mode (port 6543) first - better for serverless/edge functions
+    # Format: postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
+    pooler_url = f"postgresql://postgres.{project_ref}:{encoded_password}@{pooler_hostname}:6543{parsed.path or '/postgres'}"
     
     # Preserve existing query parameters but update sslmode
     query_params = []
