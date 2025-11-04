@@ -10,6 +10,7 @@ class UserRole(enum.Enum):
     citizen = "citizen"
     admin = "admin"
     department = "department"
+    department_officer = "department_officer"
 
 class ComplaintStatus(enum.Enum):
     new = "new"
