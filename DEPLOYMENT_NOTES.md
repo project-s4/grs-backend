@@ -62,16 +62,92 @@ If you encounter "Network is unreachable" errors with Supabase, it may be due to
 - Prefer IPv4 connections
 - Use connection pooling
 
-**IMPORTANT:** If your `DATABASE_URL` hostname resolves only to IPv6 (which Render cannot connect to), you need to use Supabase's connection pooler or IPv4-enabled endpoint. 
+**IMPORTANT:** If your `DATABASE_URL` hostname resolves only to IPv6 (which Render cannot connect to), you need to use Render's PgBouncer connection pooler.
 
-**Solution:** In your Supabase dashboard:
-1. Go to Settings → Database
-2. Use the "Connection Pooler" connection string instead of the "Direct Connection" 
-3. The pooler connection string should use an IPv4-enabled hostname
+## Solution: Set Up Render PgBouncer
 
-Alternatively, you can use Supabase's Transporter or set up IPv4 networking in Supabase.
+Since Supabase's direct connection uses IPv6-only hostnames that Render cannot connect to, we'll use Render's PgBouncer to act as a connection pooler between your app and Supabase.
 
-If issues persist, verify your `DATABASE_URL` is correctly set in Render dashboard environment variables and that it uses an IPv4-compatible endpoint.
+### Step 1: Create PgBouncer Private Service
+
+1. Go to: https://dashboard.render.com
+2. Click **New +** → **Private Service**
+3. Configure the service:
+   - **Name**: `grs-pgbouncer` (or any name you prefer)
+   - **Environment**: **Docker**
+   - **Docker Image**: `rendeross/pgbouncer:latest`
+   - **Start Command**: Leave empty (Docker image handles this)
+
+### Step 2: Configure PgBouncer Environment Variables
+
+Set these environment variables for the PgBouncer service:
+
+- **`DATABASE_URL`**: `postgresql://postgres:d5atb1Xe4QTUIB6z@db.hwlngdpexkgbtrzatfox.supabase.co:5432/postgres?sslmode=require`
+  - This is the direct Supabase connection string (IPv6). PgBouncer will connect to it.
+  
+- **`POOL_MODE`**: `transaction`
+  - Use transaction mode for serverless-friendly pooling
+  
+- **`SERVER_RESET_QUERY`**: `DISCARD ALL`
+  - Required for transaction mode to properly reset connections
+  
+- **`MAX_CLIENT_CONN`**: `500`
+  - Maximum number of client connections PgBouncer can handle
+  
+- **`DEFAULT_POOL_SIZE`**: `50`
+  - Default pool size for database connections
+
+### Step 3: Get PgBouncer Internal Hostname
+
+After PgBouncer deploys:
+
+1. Go to the PgBouncer service page
+2. Find the **Internal Hostname** (e.g., `grs-pgbouncer-1234.onrender.com`)
+3. Note the port (usually `5432`)
+
+### Step 4: Update Web Service DATABASE_URL
+
+Update your web service (`grs-backend`) environment variable:
+
+1. Go to: https://dashboard.render.com/web/srv-d44ged4hg0os73cgdg10
+2. Navigate to **Environment** → **Environment Variables**
+3. Update **`DATABASE_URL`** to:
+   ```
+   postgresql://postgres:d5atb1Xe4QTUIB6z@[PGBOUNCER_INTERNAL_HOSTNAME]:5432/postgres?sslmode=require
+   ```
+   Replace `[PGBOUNCER_INTERNAL_HOSTNAME]` with the internal hostname from Step 3.
+
+### Step 5: (Optional) Set Up Direct Connection for Migrations
+
+If you need to run database migrations (which may require features not supported by transaction mode pooler):
+
+1. Add a new environment variable **`MIGRATE_DATABASE_URL`** to your web service:
+   ```
+   postgresql://postgres:d5atb1Xe4QTUIB6z@db.hwlngdpexkgbtrzatfox.supabase.co:5432/postgres?sslmode=require
+   ```
+   This is the direct Supabase connection (bypasses PgBouncer).
+
+2. Update your migration scripts to use `MIGRATE_DATABASE_URL` when available.
+
+### How It Works
+
+```
+┌─────────────┐      IPv4      ┌──────────────┐      IPv6      ┌─────────────┐
+│   Web App   │ ──────────────> │  PgBouncer   │ ──────────────> │  Supabase   │
+│  (Render)   │                 │   (Render)   │                 │  Database   │
+└─────────────┘                 └──────────────┘                 └─────────────┘
+```
+
+- Your web app connects to PgBouncer via IPv4 (works on Render)
+- PgBouncer connects to Supabase via IPv6 (PgBouncer can handle this)
+- PgBouncer pools connections, preventing connection limit issues
+
+### Alternative: Supabase Connection Pooler
+
+If you prefer to use Supabase's built-in pooler instead:
+1. Go to: https://supabase.com/dashboard/project/hwlngdpexkgbtrzatfox/settings/database
+2. Find the **Connection Pooler** connection string (should use `pooler.supabase.com` hostname)
+3. Use that connection string directly in your web service's `DATABASE_URL`
 
 ## After Deployment
 

@@ -6,6 +6,11 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
+        # This will be set to the PgBouncer internal hostname
+        # Format: postgresql://postgres:[PASSWORD]@[PGBOUNCER_INTERNAL_HOSTNAME]:5432/postgres?sslmode=require
+        sync: false
+      - key: MIGRATE_DATABASE_URL
+        # Direct connection to Supabase for migrations (bypasses PgBouncer)
         sync: false
       - key: SECRET_KEY
         sync: false
