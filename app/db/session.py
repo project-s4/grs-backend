@@ -4,7 +4,7 @@ from sqlalchemy.pool import NullPool
 import os
 import socket
 import re
-from urllib.parse import urlparse, quote as urlquote
+from urllib.parse import urlparse, quote_plus, urlunparse
 from dotenv import load_dotenv
 import logging
 
@@ -15,6 +15,64 @@ load_dotenv()
 
 # Force IPv4 preference for Render (IPv6 may not be supported)
 socket.setdefaulttimeout(10)
+
+def build_safe_db_url(database_url: str) -> str:
+    """
+    Safely rebuild DATABASE_URL with URL-encoded credentials.
+    
+    This ensures that special characters in usernames/passwords (like @, :, /, %)
+    are properly encoded to prevent URL parsing errors.
+    
+    Args:
+        database_url: Original database URL (may have unencoded credentials)
+        
+    Returns:
+        Database URL with properly encoded username and password
+    """
+    try:
+        parsed = urlparse(database_url)
+        
+        # Extract credentials (may already be decoded by urlparse)
+        username = parsed.username or ""
+        password = parsed.password or ""
+        
+        # If no credentials, nothing to encode
+        if not username:
+            return database_url
+        
+        # URL-encode credentials (quote_plus handles spaces as +)
+        encoded_username = quote_plus(username)
+        encoded_password = quote_plus(password) if password else ""
+        
+        # Rebuild netloc with encoded credentials
+        # Format: [encoded_username]:[encoded_password]@host:port
+        if encoded_password:
+            auth_part = f"{encoded_username}:{encoded_password}"
+        else:
+            auth_part = encoded_username
+        
+        host_part = parsed.hostname or ""
+        port_part = f":{parsed.port}" if parsed.port else ""
+        new_netloc = f"{auth_part}@{host_part}{port_part}" if host_part else parsed.netloc
+        
+        # Reconstruct the URL
+        safe_url = urlunparse((
+            parsed.scheme,
+            new_netloc,
+            parsed.path,
+            parsed.params,
+            parsed.query,
+            parsed.fragment
+        ))
+        
+        # Only log if encoding changed something (to avoid noise)
+        if username != encoded_username or (password and password != encoded_password):
+            logger.debug("URL-encoded credentials in DATABASE_URL (special characters detected)")
+        
+        return safe_url
+    except Exception as e:
+        logger.warning(f"Failed to rebuild DATABASE_URL with encoded credentials: {e}. Using original URL.")
+        return database_url
 
 def convert_direct_to_pooler(database_url: str) -> str:
     """
@@ -56,7 +114,7 @@ def convert_direct_to_pooler(database_url: str) -> str:
     # Use postgresql:// protocol (SQLAlchemy compatible) - psycopg2 accepts both postgres:// and postgresql://
     pooler_hostname = f"aws-0-{region}.pooler.supabase.com"
     # URL encode password for safety
-    encoded_password = urlquote(password, safe='')
+    encoded_password = quote_plus(password)
     
     # Try transaction mode (port 6543) first - better for serverless/edge functions
     # Format: postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
@@ -128,6 +186,10 @@ elif not database_url:
     database_url = "postgresql://postgres:password@db.hwlngdpexkgbtrzatfox.supabase.co:5432/postgres?sslmode=require"
     logger.warning("DATABASE_URL not set in environment variables, using fallback (will likely fail)")
 
+# Safely rebuild DATABASE_URL with URL-encoded credentials
+# This prevents issues with special characters in passwords (like @, :, /, %)
+database_url = build_safe_db_url(database_url)
+
 # Check if this is a direct Supabase connection (IPv6-only)
 # Render cannot connect to IPv6 addresses, so we need to warn the user
 # to use the pooler URL from Supabase dashboard instead of auto-converting
@@ -146,14 +208,22 @@ if parsed.hostname and re.match(r'db\.[^.]+\.supabase\.co$', parsed.hostname):
             logger.error("")
             logger.error("✅ SOLUTION: Use Supabase Connection Pooler URL from Dashboard")
             logger.error("")
-            logger.error("1. Go to: https://supabase.com/dashboard/project/hwlngdpexkgbtrzatfox/settings/database")
-            logger.error("2. Click 'Connect' button at the top")
-            logger.error("3. Find 'Supavisor transaction mode' connection string (port 6543)")
-            logger.error("4. Copy that EXACT connection string")
+            logger.error("1. Go to: https://supabase.com/dashboard/project/hwlngdpexkgbtrzatfox")
+            logger.error("2. Click the 'Connect' button at the top of the page")
+            logger.error("3. Look for 'Session pooler' or 'Connection pooler' connection string")
+            logger.error("4. Copy that connection string and replace [YOUR-PASSWORD] with your actual password")
             logger.error("5. Update DATABASE_URL in Render with that pooler URL")
             logger.error("")
             logger.error("The pooler URL should look like:")
+            logger.error("  postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres")
+            logger.error("  OR:")
+            logger.error("  postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-1-[REGION].pooler.supabase.com:5432/postgres")
+            logger.error("  OR for transaction mode (port 6543):")
             logger.error("  postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres")
+            logger.error("")
+            logger.error("Note: If you don't see 'Connect' button, try:")
+            logger.error("  - https://supabase.com/dashboard/project/hwlngdpexkgbtrzatfox/settings/database")
+            logger.error("  - Look for 'Connection string' or 'Connection pooler' section")
             logger.error("")
             logger.error("⚠️  DO NOT use the direct connection URL - it will fail on Render!")
             logger.error("=" * 80)
@@ -175,7 +245,7 @@ else:
 DATABASE_URL = database_url
 
 # Detect if we're using Supabase pooler (Supavisor)
-# Pooler URLs use: aws-0-<region>.pooler.supabase.com
+# Pooler URLs use: aws-0-<region>.pooler.supabase.com or aws-1-<region>.pooler.supabase.com
 parsed = urlparse(DATABASE_URL)
 is_pooler = parsed.hostname and "pooler.supabase.com" in parsed.hostname
 
@@ -198,25 +268,47 @@ if is_pooler:
         logger.error("Example: postgres.hwlngdpexkgbtrzatfox")
         logger.error("")
         logger.error("✅ SOLUTION:")
-        logger.error("1. Go to: https://supabase.com/dashboard/project/hwlngdpexkgbtrzatfox/settings/database")
-        logger.error("2. Click 'Connect' button")
-        logger.error("3. Find 'Supavisor transaction mode' connection string")
-        logger.error("4. Copy the ENTIRE connection string (it has the correct username format)")
-        logger.error("5. Update DATABASE_URL in Render with that exact string")
+        logger.error("1. Go to: https://supabase.com/dashboard/project/hwlngdpexkgbtrzatfox")
+        logger.error("2. Click the 'Connect' button at the top of the page")
+        logger.error("3. Look for 'Session pooler' or 'Connection pooler' connection string")
+        logger.error("4. For serverless/auto-scaling (like Render), use the pooler connection string")
+        logger.error("5. Copy the ENTIRE connection string and replace [YOUR-PASSWORD] with your actual password")
+        logger.error("6. Update DATABASE_URL in Render with that connection string")
         logger.error("")
         logger.error("The connection string should look like:")
-        logger.error("  postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-0-ap-south-1.pooler.supabase.com:6543/postgres")
+        logger.error("  postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres")
+        logger.error("  OR:")
+        logger.error("  postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-1-[REGION].pooler.supabase.com:5432/postgres")
+        logger.error("  OR for transaction mode (port 6543):")
+        logger.error("  postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres")
+        logger.error("")
+        logger.error("Note: If you don't see 'Connect' button, try:")
+        logger.error("  - https://supabase.com/dashboard/project/hwlngdpexkgbtrzatfox/settings/database")
+        logger.error("  - Look for 'Connection string' or 'Connection pooler' section")
         logger.error("=" * 80)
     
     # Create engine with NullPool for pooler connections
+    # Transaction mode (port 6543) does not support prepared statements
+    # Session mode (port 5432) supports prepared statements
+    # See: https://supabase.com/docs/guides/database/connecting-to-postgres#supavisor-transaction-mode
+    
+    connect_args_config = {
+        "sslmode": "require",
+        "connect_timeout": 10,
+        "options": "-c statement_timeout=30000"
+    }
+    
+    # Disable prepared statements for transaction mode (port 6543)
+    # psycopg2 uses prepare_threshold to control prepared statements
+    # Setting it to None disables prepared statements entirely
+    if parsed.port == 6543:
+        logger.info("Using Supavisor transaction mode (port 6543) - disabling prepared statements")
+        connect_args_config["prepare_threshold"] = None
+    
     engine = create_engine(
         DATABASE_URL,
         poolclass=NullPool,  # No pooling - Supavisor handles it
-        connect_args={
-            "sslmode": "require",
-            "connect_timeout": 10,
-            "options": "-c statement_timeout=30000"
-        },
+        connect_args=connect_args_config,
         pool_pre_ping=True  # Verify connections before using
     )
 else:

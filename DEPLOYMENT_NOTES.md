@@ -10,8 +10,9 @@ The Render service needs to be updated with the correct commands:
 2. Navigate to **Settings** → **Build Command**
 3. Change from: `pip install -r requirements.txt`
 4. Change to: `bash build.sh`
-   
+
    OR explicitly use Python 3.12:
+
    ```
    python3.12 -m pip install --upgrade pip && python3.12 -m pip install -r requirements.txt
    ```
@@ -38,9 +39,10 @@ Alternatively, delete the start command field entirely and let Render use the `P
 
 ## Python Version Note
 
-If you encounter `undefined symbol: _PyInterpreterState_Get` errors with psycopg2, it means Render is using Python 3.13 but the package doesn't have wheels for it. 
+If you encounter `undefined symbol: _PyInterpreterState_Get` errors with psycopg2, it means Render is using Python 3.13 but the package doesn't have wheels for it.
 
 **Solution:** Ensure Python 3.12 is used:
+
 1. Go to Render Dashboard → Settings → Environment
 2. Verify that `runtime.txt` is being respected (should show Python 3.12.10)
 3. If not, you may need to manually set the Python version in the service settings
@@ -48,6 +50,7 @@ If you encounter `undefined symbol: _PyInterpreterState_Get` errors with psycopg
 ## Environment Variables Required
 
 Set these in Render dashboard:
+
 - `DATABASE_URL` - PostgreSQL connection string (Supabase format: `postgresql://postgres:PASSWORD@db.PROJECT_ID.supabase.co:5432/postgres?sslmode=require`)
 - `SECRET_KEY` - Application secret key
 - `JWT_SECRET` - JWT token secret
@@ -61,27 +64,45 @@ Set these in Render dashboard:
 
 #### ✅ Solution: Use Supabase Connection Pooler
 
-1. Go to: https://supabase.com/dashboard/project/hwlngdpexkgbtrzatfox/settings/database
-2. Click the **"Connect"** button at the top
-3. Find the **"Supavisor transaction mode"** connection string (port 6543)
-4. Copy the **ENTIRE** connection string (it has the correct format)
-5. Update `DATABASE_URL` in Render with that exact string
+1. Go to: https://supabase.com/dashboard/project/hwlngdpexkgbtrzatfox
+2. Click the **"Connect"** button at the top of the page
+3. Look for **"Session pooler"** or **"Connection pooler"** connection string
+4. For serverless/auto-scaling deployments (like Render), use the pooler connection string
+5. Copy the **ENTIRE** connection string
+6. Replace `[YOUR-PASSWORD]` with your actual database password
+7. Update `DATABASE_URL` in Render with that connection string
 
 **The connection string format should be:**
+
 ```
-postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?sslmode=require
+postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres?sslmode=require
 ```
 
+**OR for transaction mode (port 6543):**
+
+```
+postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?sslmode=require
+```
+
+**Note:** If you don't see the "Connect" button, try:
+
+- https://supabase.com/dashboard/project/hwlngdpexkgbtrzatfox/settings/database
+- Look for "Connection string" or "Connection pooler" section in the database settings
+
 **Key points:**
+
 - ✅ Username must be `postgres.[PROJECT_REF]` (not just `postgres`)
 - ✅ Hostname is `aws-0-[REGION].pooler.supabase.com` (not `db.*.supabase.co`)
 - ✅ Port is `6543` for transaction mode (or `5432` for session mode)
 - ✅ Protocol should be `postgresql://` (not `postgres://`)
 
 **Code automatically handles:**
+
 - ✅ Detects pooler URLs and uses `NullPool` to avoid double pooling
 - ✅ Validates username format and provides helpful error messages
 - ✅ Adds SSL requirements and connection timeouts
+- ✅ URL-encodes credentials to handle special characters in passwords
+- ✅ Disables prepared statements for transaction mode (port 6543) as required
 
 ## Solution: Set Up Render PgBouncer
 
@@ -103,16 +124,12 @@ Set these environment variables for the PgBouncer service:
 
 - **`DATABASE_URL`**: `postgresql://postgres:d5atb1Xe4QTUIB6z@db.hwlngdpexkgbtrzatfox.supabase.co:5432/postgres?sslmode=require`
   - This is the direct Supabase connection string (IPv6). PgBouncer will connect to it.
-  
 - **`POOL_MODE`**: `transaction`
   - Use transaction mode for serverless-friendly pooling
-  
 - **`SERVER_RESET_QUERY`**: `DISCARD ALL`
   - Required for transaction mode to properly reset connections
-  
 - **`MAX_CLIENT_CONN`**: `500`
   - Maximum number of client connections PgBouncer can handle
-  
 - **`DEFAULT_POOL_SIZE`**: `50`
   - Default pool size for database connections
 
@@ -141,9 +158,11 @@ Update your web service (`grs-backend`) environment variable:
 If you need to run database migrations (which may require features not supported by transaction mode pooler):
 
 1. Add a new environment variable **`MIGRATE_DATABASE_URL`** to your web service:
+
    ```
    postgresql://postgres:d5atb1Xe4QTUIB6z@db.hwlngdpexkgbtrzatfox.supabase.co:5432/postgres?sslmode=require
    ```
+
    This is the direct Supabase connection (bypasses PgBouncer).
 
 2. Update your migration scripts to use `MIGRATE_DATABASE_URL` when available.
@@ -168,12 +187,14 @@ If you need to run database migrations (which may require features not supported
 This means your `DATABASE_URL` credentials are incorrect. Common causes:
 
 1. **Wrong username format** - Pooler requires `postgres.[PROJECT_REF]`, not just `postgres`
+
    - ❌ Wrong: `postgresql://postgres:password@...`
    - ✅ Correct: `postgresql://postgres.hwlngdpexkgbtrzatfox:password@...`
 
 2. **Wrong password** - Get the correct password from Supabase Dashboard → Settings → Database
 
 3. **Wrong hostname** - Must use pooler hostname, not direct connection
+
    - ❌ Wrong: `db.hwlngdpexkgbtrzatfox.supabase.co`
    - ✅ Correct: `aws-0-ap-south-1.pooler.supabase.com`
 
@@ -181,12 +202,13 @@ This means your `DATABASE_URL` credentials are incorrect. Common causes:
 
 #### Error: "Network is unreachable"
 
-This means you're using the direct connection URL (`db.*.supabase.co`) which only resolves to IPv6. 
+This means you're using the direct connection URL (`db.*.supabase.co`) which only resolves to IPv6.
 **Solution:** Use the pooler URL from Supabase Dashboard (see above).
 
 ## After Deployment
 
 1. Run database migrations via Render Shell:
+
    ```bash
    alembic upgrade head
    ```
@@ -202,8 +224,8 @@ A GitHub Actions workflow has been set up to automatically trigger Render deploy
 **Workflow file:** `.github/workflows/deploy.yml`
 
 **Deploy Hook:**
+
 - URL: `https://api.render.com/deploy/srv-d44ged4hg0os73cgdg10?key=DDr_ziuaamw`
 - **Note:** For better security, add `RENDER_DEPLOY_HOOK_KEY` as a GitHub secret in your repository settings (Settings → Secrets and variables → Actions)
 
 The workflow will automatically trigger Render deployments when you push to the main branch.
-
