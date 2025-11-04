@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import NullPool
 import os
 import socket
 import re
@@ -173,19 +174,66 @@ else:
 
 DATABASE_URL = database_url
 
-# Create SQLAlchemy engine with SSL for Supabase
-engine = create_engine(
-    DATABASE_URL, 
-    connect_args={
-        "sslmode": "require",
-        "connect_timeout": 10,
-        "options": "-c statement_timeout=30000"
-    },
-    pool_pre_ping=True,  # Verify connections before using
-    pool_size=5,
-    max_overflow=10,
-    pool_recycle=3600  # Recycle connections after 1 hour
-)
+# Detect if we're using Supabase pooler (Supavisor)
+# Pooler URLs use: aws-0-<region>.pooler.supabase.com
+parsed = urlparse(DATABASE_URL)
+is_pooler = parsed.hostname and "pooler.supabase.com" in parsed.hostname
+
+# When using Supabase pooler, we MUST use NullPool to avoid double pooling
+# The pooler itself handles connection pooling, so SQLAlchemy shouldn't pool
+if is_pooler:
+    logger.info("Detected Supabase pooler connection - using NullPool to avoid double pooling")
+    
+    # Validate username format for pooler
+    # Pooler requires: postgres.[PROJECT_REF] not just postgres
+    if parsed.username and not parsed.username.startswith("postgres."):
+        logger.error("=" * 80)
+        logger.error("❌ INCORRECT USERNAME FORMAT FOR SUPABASE POOLER ❌")
+        logger.error("=" * 80)
+        logger.error(f"Current username: {parsed.username}")
+        logger.error("")
+        logger.error("When using Supabase pooler, the username MUST be:")
+        logger.error("  postgres.[PROJECT_REF]")
+        logger.error("")
+        logger.error("Example: postgres.hwlngdpexkgbtrzatfox")
+        logger.error("")
+        logger.error("✅ SOLUTION:")
+        logger.error("1. Go to: https://supabase.com/dashboard/project/hwlngdpexkgbtrzatfox/settings/database")
+        logger.error("2. Click 'Connect' button")
+        logger.error("3. Find 'Supavisor transaction mode' connection string")
+        logger.error("4. Copy the ENTIRE connection string (it has the correct username format)")
+        logger.error("5. Update DATABASE_URL in Render with that exact string")
+        logger.error("")
+        logger.error("The connection string should look like:")
+        logger.error("  postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-0-ap-south-1.pooler.supabase.com:6543/postgres")
+        logger.error("=" * 80)
+    
+    # Create engine with NullPool for pooler connections
+    engine = create_engine(
+        DATABASE_URL,
+        poolclass=NullPool,  # No pooling - Supavisor handles it
+        connect_args={
+            "sslmode": "require",
+            "connect_timeout": 10,
+            "options": "-c statement_timeout=30000"
+        },
+        pool_pre_ping=True  # Verify connections before using
+    )
+else:
+    # Direct connection - use normal pooling
+    logger.info("Using direct database connection - normal connection pooling enabled")
+    engine = create_engine(
+        DATABASE_URL, 
+        connect_args={
+            "sslmode": "require",
+            "connect_timeout": 10,
+            "options": "-c statement_timeout=30000"
+        },
+        pool_pre_ping=True,  # Verify connections before using
+        pool_size=5,
+        max_overflow=10,
+        pool_recycle=3600  # Recycle connections after 1 hour
+    )
 
 # Create sessionmaker
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

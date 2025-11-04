@@ -57,12 +57,31 @@ Set these in Render dashboard:
 
 ### Database Connection Note
 
-If you encounter "Network is unreachable" errors with Supabase, it may be due to IPv6 connectivity issues on Render. The code has been updated to:
-- Add connection timeouts
-- Prefer IPv4 connections
-- Use connection pooling
+**IMPORTANT:** Supabase's direct connection (`db.*.supabase.co`) uses IPv6-only hostnames that Render cannot connect to. You **MUST** use Supabase's Connection Pooler (Supavisor) instead.
 
-**IMPORTANT:** If your `DATABASE_URL` hostname resolves only to IPv6 (which Render cannot connect to), you need to use Render's PgBouncer connection pooler.
+#### ✅ Solution: Use Supabase Connection Pooler
+
+1. Go to: https://supabase.com/dashboard/project/hwlngdpexkgbtrzatfox/settings/database
+2. Click the **"Connect"** button at the top
+3. Find the **"Supavisor transaction mode"** connection string (port 6543)
+4. Copy the **ENTIRE** connection string (it has the correct format)
+5. Update `DATABASE_URL` in Render with that exact string
+
+**The connection string format should be:**
+```
+postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?sslmode=require
+```
+
+**Key points:**
+- ✅ Username must be `postgres.[PROJECT_REF]` (not just `postgres`)
+- ✅ Hostname is `aws-0-[REGION].pooler.supabase.com` (not `db.*.supabase.co`)
+- ✅ Port is `6543` for transaction mode (or `5432` for session mode)
+- ✅ Protocol should be `postgresql://` (not `postgres://`)
+
+**Code automatically handles:**
+- ✅ Detects pooler URLs and uses `NullPool` to avoid double pooling
+- ✅ Validates username format and provides helpful error messages
+- ✅ Adds SSL requirements and connection timeouts
 
 ## Solution: Set Up Render PgBouncer
 
@@ -142,12 +161,28 @@ If you need to run database migrations (which may require features not supported
 - PgBouncer connects to Supabase via IPv6 (PgBouncer can handle this)
 - PgBouncer pools connections, preventing connection limit issues
 
-### Alternative: Supabase Connection Pooler
+### Troubleshooting Database Connection Errors
 
-If you prefer to use Supabase's built-in pooler instead:
-1. Go to: https://supabase.com/dashboard/project/hwlngdpexkgbtrzatfox/settings/database
-2. Find the **Connection Pooler** connection string (should use `pooler.supabase.com` hostname)
-3. Use that connection string directly in your web service's `DATABASE_URL`
+#### Error: "Tenant or user not found"
+
+This means your `DATABASE_URL` credentials are incorrect. Common causes:
+
+1. **Wrong username format** - Pooler requires `postgres.[PROJECT_REF]`, not just `postgres`
+   - ❌ Wrong: `postgresql://postgres:password@...`
+   - ✅ Correct: `postgresql://postgres.hwlngdpexkgbtrzatfox:password@...`
+
+2. **Wrong password** - Get the correct password from Supabase Dashboard → Settings → Database
+
+3. **Wrong hostname** - Must use pooler hostname, not direct connection
+   - ❌ Wrong: `db.hwlngdpexkgbtrzatfox.supabase.co`
+   - ✅ Correct: `aws-0-ap-south-1.pooler.supabase.com`
+
+4. **Connection pooling conflict** - Code automatically uses `NullPool` for pooler connections (fixed in code)
+
+#### Error: "Network is unreachable"
+
+This means you're using the direct connection URL (`db.*.supabase.co`) which only resolves to IPv6. 
+**Solution:** Use the pooler URL from Supabase Dashboard (see above).
 
 ## After Deployment
 
