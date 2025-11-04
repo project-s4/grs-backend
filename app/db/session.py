@@ -127,27 +127,40 @@ elif not database_url:
     database_url = "postgresql://postgres:password@db.hwlngdpexkgbtrzatfox.supabase.co:5432/postgres?sslmode=require"
     logger.warning("DATABASE_URL not set in environment variables, using fallback (will likely fail)")
 
-# Check if this is a direct Supabase connection (IPv6-only) and convert to pooler (IPv4-compatible)
-# This is necessary because Render cannot connect to IPv6 addresses
+# Check if this is a direct Supabase connection (IPv6-only)
+# Render cannot connect to IPv6 addresses, so we need to warn the user
+# to use the pooler URL from Supabase dashboard instead of auto-converting
 parsed = urlparse(database_url)
 if parsed.hostname and re.match(r'db\.[^.]+\.supabase\.co$', parsed.hostname):
     # Check if IPv4 is available for direct connection
     try:
         ipv4_info = socket.getaddrinfo(parsed.hostname, None, socket.AF_INET, socket.SOCK_STREAM)
         if not ipv4_info:
-            # IPv6-only: Convert to pooler
-            logger.info("Direct Supabase connection is IPv6-only, converting to pooler (IPv4-compatible)...")
-            original_url = database_url
-            database_url = convert_direct_to_pooler(database_url)
-            if database_url != original_url:
-                logger.info(f"Converted to pooler connection: {urlparse(database_url).hostname}")
-    except (socket.gaierror, OSError):
-        # If resolution fails, assume IPv6-only and convert to pooler
-        logger.warning("Could not resolve Supabase hostname, converting to pooler as fallback...")
-        original_url = database_url
-        database_url = convert_direct_to_pooler(database_url)
-        if database_url != original_url:
-            logger.info(f"Converted to pooler connection: {urlparse(database_url).hostname}")
+            # IPv6-only: This will fail on Render
+            logger.error("=" * 80)
+            logger.error("❌ DIRECT SUPABASE CONNECTION WILL FAIL ON RENDER ❌")
+            logger.error("=" * 80)
+            logger.error(f"Your DATABASE_URL uses: {parsed.hostname}")
+            logger.error("This hostname only resolves to IPv6, which Render cannot connect to.")
+            logger.error("")
+            logger.error("✅ SOLUTION: Use Supabase Connection Pooler URL from Dashboard")
+            logger.error("")
+            logger.error("1. Go to: https://supabase.com/dashboard/project/hwlngdpexkgbtrzatfox/settings/database")
+            logger.error("2. Click 'Connect' button at the top")
+            logger.error("3. Find 'Supavisor transaction mode' connection string (port 6543)")
+            logger.error("4. Copy that EXACT connection string")
+            logger.error("5. Update DATABASE_URL in Render with that pooler URL")
+            logger.error("")
+            logger.error("The pooler URL should look like:")
+            logger.error("  postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres")
+            logger.error("")
+            logger.error("⚠️  DO NOT use the direct connection URL - it will fail on Render!")
+            logger.error("=" * 80)
+            # Don't auto-convert - let the user configure it correctly
+    except (socket.gaierror, OSError) as e:
+        # If resolution fails, log warning but don't auto-convert
+        logger.warning(f"Could not resolve Supabase hostname ({parsed.hostname}): {e}")
+        logger.warning("If this is a direct Supabase connection, you MUST use the pooler URL from Supabase dashboard.")
 
 # Check and warn about IPv6-only connections (for logging purposes)
 check_supabase_connection_config(database_url)
