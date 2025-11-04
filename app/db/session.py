@@ -51,11 +51,11 @@ def convert_direct_to_pooler(database_url: str) -> str:
     
     # Build pooler connection string (session mode - port 5432)
     # Username format: postgres.[PROJECT_REF]
-    # Use postgres:// protocol (Supabase pooler format) instead of postgresql://
+    # Use postgresql:// protocol (SQLAlchemy compatible) - psycopg2 accepts both postgres:// and postgresql://
     pooler_hostname = f"aws-0-{region}.pooler.supabase.com"
     # URL encode password for safety
     encoded_password = urlquote(password, safe='')
-    pooler_url = f"postgres://postgres.{project_ref}:{encoded_password}@{pooler_hostname}:5432{parsed.path or '/postgres'}"
+    pooler_url = f"postgresql://postgres.{project_ref}:{encoded_password}@{pooler_hostname}:5432{parsed.path or '/postgres'}"
     
     # Preserve existing query parameters but update sslmode
     query_params = []
