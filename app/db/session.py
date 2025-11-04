@@ -89,10 +89,6 @@ else:
 DATABASE_URL = database_url
 
 # Create SQLAlchemy engine with SSL for Supabase
-# Disable prepared statements for transaction mode pooler (port 6543)
-# Transaction mode doesn't support prepared statements
-use_prepared_statements = ":6543" not in DATABASE_URL
-
 engine = create_engine(
     DATABASE_URL, 
     connect_args={
@@ -103,8 +99,7 @@ engine = create_engine(
     pool_pre_ping=True,  # Verify connections before using
     pool_size=5,
     max_overflow=10,
-    pool_recycle=3600,  # Recycle connections after 1 hour
-    prepare_statement_cache_size=0 if not use_prepared_statements else 500
+    pool_recycle=3600  # Recycle connections after 1 hour
 )
 
 # Create sessionmaker
