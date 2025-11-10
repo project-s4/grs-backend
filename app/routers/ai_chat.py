@@ -9,7 +9,7 @@ from app.services.map import map_department
 from app.routers.ai import ai_create_complaint_internal
 from app.db.session import get_db
 from app.config import settings
-from langdetect import detect
+from langdetect import detect, LangDetectException
 from typing import Tuple
 import json
 import logging
@@ -302,7 +302,7 @@ async def chatbot(msg: ChatMessage, db: Session = Depends(get_db)):
                     session["subcategory"] = classification.get("subcategory", session.get("subcategory"))
                     
                     # Re-map department based on new category
-                    mapped_dept = map_department(session["category"])
+                    mapped_dept = map_department(session["category"], db)
                     if mapped_dept:
                         session["department_code"] = mapped_dept
                     
@@ -350,9 +350,15 @@ async def chatbot(msg: ChatMessage, db: Session = Depends(get_db)):
             )
         
         session["raw_text"] = text
-        language = detect(text)
+        try:
+            language = detect(text)
+        except LangDetectException:
+            logger.warning("Could not detect language for user input; defaulting to 'unknown'")
+            language = "unknown"
         session["language"] = language
-        translated = translate_text(text, "en")
+        translated = translate_text(text, "en") if text.strip() else ""
+        if not translated:
+            translated = text
         session["description"] = translated
 
         classification_raw = await classify_complaint(translated)
@@ -380,8 +386,8 @@ async def chatbot(msg: ChatMessage, db: Session = Depends(get_db)):
         session["category"] = classification.get("category")
         session["subcategory"] = classification.get("subcategory")
         # Default to SAN if mapping fails
-        mapped_dept = map_department(session["category"])
-        session["department_code"] = mapped_dept or "SAN"
+        mapped_dept = map_department(session["category"], db) 
+        session["department_code"] = mapped_dept or "PW"
     
     # Handle initial user data if provided
     if msg.user:
@@ -446,7 +452,7 @@ async def chatbot(msg: ChatMessage, db: Session = Depends(get_db)):
         translated_text=session.get("translated_text") or session.get("description"),
         category=session.get("category"),
         subcategory=session.get("subcategory"),
-        department_code=session.get("department_code") or "SAN",
+        department_code=session.get("department_code") or "PW",
         source="chatbot",
         complaint_metadata={
             "location": session.get("location"),

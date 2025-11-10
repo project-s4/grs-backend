@@ -3,6 +3,9 @@ import google.generativeai as genai
 import os
 import json
 import re
+import asyncio
+
+from app.services.gemini_client import generate_with_retries
 
 async def generate_complaint_from_voice(text: str) -> dict:
     """
@@ -38,9 +41,18 @@ async def generate_complaint_from_voice(text: str) -> dict:
                 continue
         if model is None:
             raise RuntimeError("Failed to initialize any Gemini model")
-        response = model.generate_content(prompt)
-        
-        result_text = response.text
+        try:
+            response = await generate_with_retries(model, prompt, retries=3, timeout=20.0, initial_backoff=1.0)
+            result_text = response.text
+        except Exception as e:
+            # Surface detailed error and fallback
+            print(f"Generation error (after retries): {e}")
+            return {
+                "title": "Voice Complaint",
+                "description": text,
+                "category": "Other",
+                "department": "General"
+            }
         # Extract JSON from response
         json_match = re.search(r'\{[\s\S]*\}', result_text)
         if json_match:

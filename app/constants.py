@@ -20,12 +20,13 @@ class UserIntent(str, Enum):
 
 # Department mapping to actual department codes in database
 DEPARTMENT_MAPPING = {
-    ComplaintCategory.SANITATION: "SAN",        # Sanitation
-    ComplaintCategory.WATER_SUPPLY: "WAT",       # Water
-    ComplaintCategory.STREET_LIGHTING: "ELE",     # Electrical (for lighting)
-    ComplaintCategory.ROADS: "ROD",              # Roads
-    ComplaintCategory.PUBLIC_SAFETY: "HEL",       # Health (or use HEL for safety/health issues)
-    ComplaintCategory.OTHER: "SAN",              # Default to Sanitation
+    # Map to actual department codes that exist in the seeded database
+    ComplaintCategory.SANITATION: "ENV",       # Environment Department handles sanitation issues
+    ComplaintCategory.WATER_SUPPLY: "PW",      # Public Works manages water supply
+    ComplaintCategory.STREET_LIGHTING: "PW",   # Public Works also covers street lighting
+    ComplaintCategory.ROADS: "PW-SUB",         # Roads sub-department under Public Works
+    ComplaintCategory.PUBLIC_SAFETY: "PD",     # Police Department for safety concerns
+    ComplaintCategory.OTHER: "PW",             # Default fallback to Public Works
 }
 
 # Keyword-based fallback classification rules

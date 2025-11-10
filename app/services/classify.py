@@ -3,6 +3,9 @@ import re
 import logging
 from typing import Dict, Any, Optional
 import google.generativeai as genai
+import asyncio
+
+from app.services.gemini_client import generate_with_retries
 
 from app.config import settings
 from app.constants import ComplaintCategory, UserIntent, KEYWORD_RULES
@@ -142,11 +145,15 @@ Respond with ONLY this JSON structure, no markdown, no explanation:
     "intent": "<intent>"
 }}"""
         
-        # Get response from Gemini
-        response = model.generate_content(prompt)
-        raw_output = response.text.strip()
-        
-        logger.info(f"Gemini raw response: {raw_output}")
+        # Get response from Gemini with retries and timeout
+        try:
+            response = await generate_with_retries(model, prompt, retries=3, timeout=20.0, initial_backoff=1.0)
+            raw_output = response.text.strip()
+            logger.info(f"Gemini raw response: {raw_output}")
+        except Exception as gem_e:
+            # Bubble up to outer exception handler so fallback is used
+            logger.exception(f"Gemini generate_content failed after retries: {gem_e}")
+            raise
         
         # Extract and validate JSON
         classification = extract_json_from_response(raw_output)

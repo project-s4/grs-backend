@@ -1,20 +1,40 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Header
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, func
+import logging
 from app.schemas.complaints import ComplaintCreate, ComplaintResponse, ComplaintUpdate
 from app.db.session import get_db
 from app.models.models import Complaint, Department, User, ComplaintStatus
 from app.core.security import get_current_user, decode_access_token
 import random
 from typing import Optional
+import json
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/complaints", response_model=ComplaintResponse)
 def create_complaint(payload: ComplaintCreate, db: Session = Depends(get_db)):
+    # Log incoming payload for debugging
+    logger.info(f"create_complaint called with department_code={payload.department_code}")
+
+    if not payload.department_code or str(payload.department_code).strip() == "":
+        raise HTTPException(status_code=400, detail="Missing department_code in payload")
+
+    # Try to find by code first (exact match)
     department = db.query(Department).filter_by(code=payload.department_code).first()
+
+    # If not found, try a case-insensitive match against department name
     if not department:
-        raise HTTPException(status_code=400, detail="Invalid department code")
+        try:
+            department = db.query(Department).filter(func.lower(Department.name) == str(payload.department_code).lower()).first()
+        except Exception:
+            department = None
+
+    # If still not found, provide clearer error message listing valid codes
+    if not department:
+        valid_codes = [d.code for d in db.query(Department).all()]
+        raise HTTPException(status_code=400, detail=f"Invalid department code: '{payload.department_code}'. Valid codes: {valid_codes}")
 
     ref_no = f"COMP-{random.randint(100000, 999999)}"
     complaint = Complaint(
@@ -46,6 +66,7 @@ def get_complaints(
     status: Optional[str] = Query(None),
     department_id: Optional[str] = Query(None),
     user_id: Optional[str] = Query(None),
+    assigned_to: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db)
@@ -102,6 +123,8 @@ def get_complaints(
         query = query.filter(Complaint.department_id == department_id)
     if user_id:
         query = query.filter(Complaint.user_id == user_id)
+    if assigned_to:
+        query = query.filter(Complaint.assigned_to == assigned_to)
     
     total = query.count()
     results = query.offset(offset).limit(limit).all()
@@ -113,10 +136,19 @@ def get_complaints(
         (complaint_id, reference_no, title, description, category, 
          complaint_metadata, created_at, department_id, user_id, 
          assigned_to, status_str, dept_name, user_name, user_email, user_phone) = row
+        # Parse metadata safely
+        parsed_metadata = {}
+        if complaint_metadata:
+            if isinstance(complaint_metadata, dict):
+                parsed_metadata = complaint_metadata
+            else:
+                try:
+                    parsed_metadata = json.loads(complaint_metadata)
+                except (TypeError, ValueError):
+                    parsed_metadata = {}
+
         # Get priority from metadata or default
-        priority = "Medium"
-        if complaint_metadata and isinstance(complaint_metadata, dict):
-            priority = complaint_metadata.get("priority", "Medium")
+        priority = parsed_metadata.get("priority", "Medium") if parsed_metadata else "Medium"
         
         # Use status_str from query (already converted to string)
         status_enum_value = (status_str or "new").lower()
@@ -133,6 +165,10 @@ def get_complaints(
         }
         status_value = status_mapping.get(status_enum_value, status_enum_value.title())
         
+        citizen_name = user_name or parsed_metadata.get("name") or parsed_metadata.get("user_name") or parsed_metadata.get("citizen_name")
+        citizen_email = user_email or parsed_metadata.get("email")
+        citizen_phone = user_phone or parsed_metadata.get("phone") or parsed_metadata.get("contact") or parsed_metadata.get("mobile")
+
         complaint_dict = {
             "id": str(complaint_id),
             "tracking_id": reference_no or "",
@@ -143,10 +179,10 @@ def get_complaints(
             "status": status_value,
             "department_id": str(department_id) if department_id else None,
             "department_name": dept_name or "Unknown",
-            "user_name": user_name,
-            "user_email": user_email,
-            "email": user_email,
-            "phone": user_phone,
+            "user_name": citizen_name,
+            "user_email": citizen_email,
+            "email": citizen_email,
+            "phone": citizen_phone,
             "assigned_to": str(assigned_to) if assigned_to else None,
             "created_at": created_at.isoformat() if created_at else "",
             "updated_at": created_at.isoformat() if created_at else ""  # Using created_at as fallback

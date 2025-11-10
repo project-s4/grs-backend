@@ -293,10 +293,11 @@ if is_pooler:
     # See: https://supabase.com/docs/guides/database/connecting-to-postgres#supavisor-transaction-mode
     
     connect_args_config = {
-        "sslmode": "require",
         "connect_timeout": 10,
         "options": "-c statement_timeout=30000"
     }
+    if "sslmode=disable" not in DATABASE_URL.lower():
+        connect_args_config["sslmode"] = "require"
     
     # Disable prepared statements for transaction mode (port 6543)
     # psycopg2 uses prepare_threshold to control prepared statements
@@ -314,13 +315,15 @@ if is_pooler:
 else:
     # Direct connection - use normal pooling
     logger.info("Using direct database connection - normal connection pooling enabled")
+    connect_args = {
+        "connect_timeout": 10,
+        "options": "-c statement_timeout=30000"
+    }
+    if "sslmode=disable" not in DATABASE_URL.lower():
+        connect_args["sslmode"] = "require"
     engine = create_engine(
         DATABASE_URL, 
-        connect_args={
-            "sslmode": "require",
-            "connect_timeout": 10,
-            "options": "-c statement_timeout=30000"
-        },
+        connect_args=connect_args,
         pool_pre_ping=True,  # Verify connections before using
         pool_size=5,
         max_overflow=10,
