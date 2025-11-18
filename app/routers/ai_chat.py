@@ -385,9 +385,9 @@ async def chatbot(msg: ChatMessage, db: Session = Depends(get_db)):
         
         session["category"] = classification.get("category")
         session["subcategory"] = classification.get("subcategory")
-        # Default to SAN if mapping fails
+        # Map category to department code (Sanitation -> BBMP, Street Lighting -> BESCOM for Bengaluru)
         mapped_dept = map_department(session["category"], db) 
-        session["department_code"] = mapped_dept or "PW"
+        session["department_code"] = mapped_dept or "PW"  # Default fallback to Public Works
     
     # Handle initial user data if provided
     if msg.user:

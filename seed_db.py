@@ -37,6 +37,8 @@ DEPARTMENTS = [
     {"code": "PD", "name": "Police Department", "parent_id": None},
     {"code": "FD", "name": "Fire Department", "parent_id": None},
     {"code": "ENV", "name": "Environment Department", "parent_id": None},
+    {"code": "BBMP", "name": "BBMP", "parent_id": None},  # Bruhat Bengaluru Mahanagara Palike - handles sanitation in Bengaluru
+    {"code": "BESCOM", "name": "BESCOM", "parent_id": None},  # Bangalore Electricity Supply Company - handles electricity in Bengaluru
     {"code": "PW-SUB", "name": "Public Works - Roads", "parent_code": "PW"},
     {"code": "HD-SUB", "name": "Health Department - Clinics", "parent_code": "HD"},
 ]

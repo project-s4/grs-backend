@@ -21,9 +21,11 @@ class UserIntent(str, Enum):
 # Department mapping to actual department codes in database
 DEPARTMENT_MAPPING = {
     # Map to actual department codes that exist in the seeded database
-    ComplaintCategory.SANITATION: "ENV",       # Environment Department handles sanitation issues
+    # Bengaluru-specific local bodies:
+    ComplaintCategory.SANITATION: "BBMP",      # BBMP (Bruhat Bengaluru Mahanagara Palike) handles sanitation issues in Bengaluru
+    ComplaintCategory.STREET_LIGHTING: "BESCOM", # BESCOM (Bangalore Electricity Supply Company) handles electricity and street lighting in Bengaluru
+    # Other categories:
     ComplaintCategory.WATER_SUPPLY: "PW",      # Public Works manages water supply
-    ComplaintCategory.STREET_LIGHTING: "PW",   # Public Works also covers street lighting
     ComplaintCategory.ROADS: "PW-SUB",         # Roads sub-department under Public Works
     ComplaintCategory.PUBLIC_SAFETY: "PD",     # Police Department for safety concerns
     ComplaintCategory.OTHER: "PW",             # Default fallback to Public Works
