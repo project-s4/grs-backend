@@ -114,7 +114,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router, prefix="/api", tags=["Authentication"])
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(complaints.router, prefix="/api", tags=["Complaints"])
 app.include_router(departments.router, prefix="/api", tags=["Departments"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
