@@ -30,13 +30,26 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         user = db.query(User).filter(User.email == request.username).first()
         
         if not user:
-            # Create a mock user with default role
+            # Try to infer role from username/email
+            # If username contains admin/department/dept, assign appropriate role
+            username_lower = request.username.lower()
+            role = UserRole.citizen  # default
+            
+            if 'admin' in username_lower:
+                role = UserRole.admin
+            elif 'dept' in username_lower or 'department' in username_lower or 'officer' in username_lower:
+                role = UserRole.department
+            elif 'bbmp' in username_lower or 'bescom' in username_lower or any(dept in username_lower for dept in ['pw', 'hd', 'ed', 'td', 'rd', 'pd', 'fd']):
+                # Department codes in username - assign department role
+                role = UserRole.department
+            
+            # Create a mock user with inferred role
             user = User(
                 id=uuid.uuid4(),
                 name=request.username,
                 email=request.username,
                 phone="",
-                role=UserRole.citizen,
+                role=role,
                 supabase_user_id=uuid.uuid4()  # Generate a random UUID for mock auth
             )
             db.add(user)
