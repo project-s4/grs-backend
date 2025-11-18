@@ -9,7 +9,7 @@ bcrypt<4.0.0  # Pin bcrypt to < 4.0.0 for passlib 1.7.4 compatibility
 pydantic[email]==2.8.2
 pydantic-settings>=2.4.0
 redis==5.0.1
-httpx==0.27.0
+httpx==0.25.2
 python-dotenv==1.0.0
 python-multipart==0.0.6
 supabase==2.3.4
