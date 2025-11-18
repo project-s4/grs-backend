@@ -16,21 +16,39 @@ def get_supabase():
 def verify_supabase_token(token: str):
     """Verify Supabase JWT token and return user data."""
     try:
-        # Create a client and set the session with the token
+        # Create a client with the token
         user_client = create_client(supabase_url, supabase_key)
-        # Set session with the access token
-        user_client.auth.set_session(access_token=token, refresh_token="")
         
-        # Get user - when session is set, get_user() uses the session token
-        response = user_client.auth.get_user()
-        if response.user:
-            return {
-                "id": str(response.user.id),
-                "email": response.user.email or "",
-            }
-        return None
+        # Use get_user with the token - this verifies the JWT and returns user data
+        response = user_client.auth.get_user(token)
+        
+        # Check if response is valid
+        if not response:
+            logger.warning("Token verification returned None response")
+            return None
+            
+        # Check if response has user attribute
+        if not hasattr(response, 'user'):
+            logger.warning(f"Response has no 'user' attribute. Response type: {type(response)}, Response: {response}")
+            return None
+            
+        # Check if user exists
+        if not response.user:
+            logger.warning("Response.user is None")
+            return None
+        
+        # Return user data
+        user_data = {
+            "id": str(response.user.id),
+            "email": response.user.email or "",
+        }
+        logger.info(f"Token verified successfully for user: {user_data['email']}")
+        return user_data
+        
     except Exception as e:
-        logger.error(f"Error verifying Supabase token: {e}")
+        logger.error(f"Error verifying Supabase token: {e}", exc_info=True)
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return None
 
 def get_supabase_user(token: str):
