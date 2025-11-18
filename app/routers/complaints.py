@@ -5,7 +5,8 @@ import logging
 from app.schemas.complaints import ComplaintCreate, ComplaintResponse, ComplaintUpdate
 from app.db.session import get_db
 from app.models.models import Complaint, Department, User, ComplaintStatus
-from app.core.security import get_current_user, decode_access_token
+from app.core.security import get_current_user
+from app.db.supabase import verify_supabase_token
 import random
 from typing import Optional
 import json
@@ -263,13 +264,11 @@ def track_complaint(
         # Try to get token from Authorization header
         if authorization.startswith("Bearer "):
             token = authorization.split(" ")[1]
-            payload = decode_access_token(token)
-            if payload:
-                email = payload.get("sub")
-                if email:
-                    current_user = db.query(User).filter(User.email == email).first()
-                    if current_user:
-                        user = current_user
+            supabase_user = verify_supabase_token(token)
+            if supabase_user:
+                current_user = db.query(User).filter(User.supabase_user_id == supabase_user["id"]).first()
+                if current_user:
+                    user = current_user
     
     # If still no user, try to look up by email from metadata
     if not user and complaint.complaint_metadata:

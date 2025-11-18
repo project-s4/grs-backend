@@ -1,42 +1,91 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Form
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError, DatabaseError
-from typing import Dict, Any, Optional, cast
+from pydantic import BaseModel
 from app.db.session import get_db
-from app.core.security import (
-    verify_password, create_access_token, get_password_hash, decode_access_token
-)
-from app.schemas.users import UserCreate, UserResponse, ForgotPasswordRequest, ResetPasswordRequest
+from app.core.security import get_current_user
+from app.db.supabase import verify_supabase_token
+from app.schemas.users import UserProfileCreate, UserResponse
 from app.models.models import User, UserRole
-from datetime import datetime, timedelta
-import secrets
 import uuid
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-@router.post("/register", response_model=UserResponse)
-async def register_user(user: UserCreate, db: Session = Depends(get_db)):
+class TokenRequest(BaseModel):
+    token: str
+
+@router.post("/verify")
+async def verify_token(request: TokenRequest, db: Session = Depends(get_db)):
+    """Verify Supabase token and return user profile."""
     try:
-        # Check if email exists
-        existing_user = db.query(User).filter(User.email == user.email).first()
-        if existing_user:
-            raise HTTPException(status_code=400, detail="Email already registered")
+        # Verify token with Supabase
+        supabase_user = verify_supabase_token(request.token)
+        if supabase_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         
-        # Create new user
-        hashed_password = get_password_hash(user.password)
-        new_user = User(
-            id=uuid.uuid4(),
+        # Find user in local database
+        user = db.query(User).filter(User.supabase_user_id == supabase_user["id"]).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User profile not found. Please complete registration."
+            )
+        
+        return UserResponse(
+            id=user.id,
             name=user.name,
             email=user.email,
             phone=user.phone,
-            password_hash=hashed_password,
             role=user.role,
-            department_id=user.department_id
+            supabase_user_id=user.supabase_user_id
+        )
+    except HTTPException:
+        raise
+    except (OperationalError, DatabaseError) as e:
+        logger.error(f"Database error in verify: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection error. Please check backend configuration."
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in verify: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred. Please try again."
+        )
+
+@router.post("/create-profile", response_model=UserResponse)
+async def create_profile(profile: UserProfileCreate, db: Session = Depends(get_db)):
+    """Create user profile in local database after Supabase signup."""
+    try:
+        # Note: supabase_user_id is the UUID from Supabase Auth, not a token
+        # The frontend has already verified the user via OAuth, so we trust it
+        
+        # Check if user already exists
+        existing_user = db.query(User).filter(
+            (User.supabase_user_id == uuid.UUID(profile.supabase_user_id)) |
+            (User.email == profile.email)
+        ).first()
+        
+        if existing_user:
+            raise HTTPException(status_code=400, detail="User profile already exists")
+        
+        # Create new user profile
+        new_user = User(
+            id=uuid.uuid4(),
+            name=profile.name,
+            email=profile.email,
+            phone=profile.phone,
+            role=profile.role,
+            department_id=profile.department_id,
+            supabase_user_id=uuid.UUID(profile.supabase_user_id)
         )
         
         db.add(new_user)
@@ -48,186 +97,34 @@ async def register_user(user: UserCreate, db: Session = Depends(get_db)):
             name=new_user.name,
             phone=new_user.phone,
             email=new_user.email,
-            role=new_user.role
+            role=new_user.role,
+            supabase_user_id=new_user.supabase_user_id
         )
-    except (OperationalError, DatabaseError) as e:
-        logger.error(f"Database error in register: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail="Database connection error. Please check backend configuration."
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error in register: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="An error occurred during registration. Please try again."
-        )
-
-@router.post("/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    try:
-        # Query user by email using SQLAlchemy
-        user = db.query(User).filter(User.email == form_data.username).first()
-        
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect username or password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        if not verify_password(form_data.password, user.password_hash):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect username or password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        # Extract values from user object
-        user_dict = {
-            "sub": str(user.email),
-            "id": str(user.id),
-            "name": str(user.name),
-            "email": str(user.email),
-            "role": str(user.role.value) if hasattr(user.role, 'value') else str(user.role),
-            "department_id": str(user.department_id) if user.department_id else None
-        }
-        
-        access_token = create_access_token(data=user_dict)
-        
-        # Return response
-        return {
-            "access_token": access_token,
-            "token": access_token,  # For frontend compatibility
-            "token_type": "bearer",
-            "user": {
-                "id": user_dict["id"],
-                "email": user_dict["email"],
-                "name": user_dict["name"],
-                "role": user_dict["role"],
-                "department_id": user_dict["department_id"]
-            }
-        }
     except HTTPException:
-        # Re-raise HTTP exceptions (like 401)
         raise
     except (OperationalError, DatabaseError) as e:
-        logger.error(f"Database error in login: {e}")
+        logger.error(f"Database error in create_profile: {e}")
+        db.rollback()
         raise HTTPException(
             status_code=503,
             detail="Database connection error. Please check backend configuration."
         )
     except Exception as e:
-        logger.error(f"Unexpected error in login: {e}")
+        logger.error(f"Unexpected error in create_profile: {e}")
+        db.rollback()
         raise HTTPException(
             status_code=500,
-            detail="An error occurred during login. Please try again."
-        )
-
-@router.post("/forgot-password")
-async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    try:
-        user = db.query(User).filter(User.email == request.email).first()
-        if not user:
-            return {"message": "If an account exists with this email, a password reset link has been sent."}
-        
-        reset_token = secrets.token_urlsafe(32)
-        reset_token_expiry = datetime.utcnow() + timedelta(hours=1)
-        
-        user.reset_token = reset_token
-        user.reset_token_expiry = reset_token_expiry
-        db.commit()
-        
-        # In production, send email with reset link
-        # For now, return token in response (remove in production!)
-        return {"message": "If an account exists with this email, a password reset link has been sent.", "token": reset_token}
-    except (OperationalError, DatabaseError) as e:
-        logger.error(f"Database error in forgot_password: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail="Database connection error. Please check backend configuration."
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error in forgot_password: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="An error occurred. Please try again."
-        )
-
-@router.post("/reset-password")
-async def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
-    try:
-        user = db.query(User).filter(User.reset_token == request.token).first()
-        if not user:
-            raise HTTPException(status_code=400, detail="Invalid reset token")
-        
-        current_time = datetime.utcnow()
-        
-        if user.reset_token_expiry is None or user.reset_token_expiry < current_time:
-            raise HTTPException(status_code=400, detail="Reset token has expired")
-        
-        user.password_hash = get_password_hash(request.new_password)
-        user.reset_token = None
-        user.reset_token_expiry = None
-        db.commit()
-        
-        return {"message": "Password has been reset successfully"}
-    except HTTPException:
-        # Re-raise HTTP exceptions (like 400)
-        raise
-    except (OperationalError, DatabaseError) as e:
-        logger.error(f"Database error in reset_password: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail="Database connection error. Please check backend configuration."
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error in reset_password: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="An error occurred. Please try again."
+            detail="An error occurred during profile creation. Please try again."
         )
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
+async def get_me(current_user: User = Depends(get_current_user)):
+    """Get current user profile."""
+    return UserResponse(
+        id=current_user.id,
+        name=current_user.name,
+        email=current_user.email,
+        phone=current_user.phone,
+        role=current_user.role,
+        supabase_user_id=current_user.supabase_user_id
     )
-    
-    try:
-        payload = decode_access_token(token)
-        if payload is None:
-            raise credentials_exception
-        
-        email = str(payload.get("sub", ""))
-        if not email:
-            raise credentials_exception
-        
-        user = db.query(User).filter(User.email == email).first()
-        if not user:
-            raise credentials_exception
-        
-        return UserResponse(
-            id=user.id,
-            name=user.name,
-            email=user.email,
-            phone=user.phone,
-            role=user.role
-        )
-    except HTTPException:
-        # Re-raise HTTP exceptions (like 401)
-        raise
-    except (OperationalError, DatabaseError) as e:
-        logger.error(f"Database error in get_current_user: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail="Database connection error. Please check backend configuration."
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error in get_current_user: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="An error occurred. Please try again."
-        )

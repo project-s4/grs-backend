@@ -25,12 +25,10 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
     phone = Column(String, unique=True, index=True)
-    email = Column(String, unique=True, nullable=True)
+    email = Column(String, unique=True, nullable=False)
     role = Column(Enum(UserRole), default=UserRole.citizen)
-    password_hash = Column(String, nullable=True)
+    supabase_user_id = Column(UUID(as_uuid=True), unique=True, nullable=False)
     department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id"), nullable=True)
-    reset_token = Column(String, nullable=True)
-    reset_token_expiry = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Department(Base):
