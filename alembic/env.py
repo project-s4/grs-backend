@@ -4,10 +4,26 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# Override sqlalchemy.url with DATABASE_URL from environment if available
+# Use the same connection logic as the app
+database_url = os.getenv("DATABASE_URL")
+if database_url:
+    # Import the session module to use its DATABASE_URL processing
+    import sys
+    from os.path import abspath, dirname
+    sys.path.insert(0, dirname(dirname(abspath(__file__))))
+    from app.db.session import DATABASE_URL as processed_url
+    config.set_main_option("sqlalchemy.url", processed_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
