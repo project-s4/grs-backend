@@ -75,13 +75,13 @@ Set these in Render dashboard:
 **The connection string format should be:**
 
 ```
-postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres?sslmode=require
+postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require
 ```
 
 **OR for transaction mode (port 6543):**
 
 ```
-postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?sslmode=require
+postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-1-ap-south-1.pooler.supabase.com:6543/postgres?sslmode=require
 ```
 
 **Note:** If you don't see the "Connect" button, try:
@@ -92,7 +92,7 @@ postgresql://postgres.hwlngdpexkgbtrzatfox:[PASSWORD]@aws-0-[REGION].pooler.supa
 **Key points:**
 
 - ✅ Username must be `postgres.[PROJECT_REF]` (not just `postgres`)
-- ✅ Hostname is `aws-0-[REGION].pooler.supabase.com` (not `db.*.supabase.co`)
+- ✅ Hostname is `aws-1-ap-south-1.pooler.supabase.com` (not `db.*.supabase.co`)
 - ✅ Port is `6543` for transaction mode (or `5432` for session mode)
 - ✅ Protocol should be `postgresql://` (not `postgres://`)
 
@@ -196,7 +196,7 @@ This means your `DATABASE_URL` credentials are incorrect. Common causes:
 3. **Wrong hostname** - Must use pooler hostname, not direct connection
 
    - ❌ Wrong: `db.hwlngdpexkgbtrzatfox.supabase.co`
-   - ✅ Correct: `aws-0-ap-south-1.pooler.supabase.com`
+   - ✅ Correct: `aws-1-ap-south-1.pooler.supabase.com`
 
 4. **Connection pooling conflict** - Code automatically uses `NullPool` for pooler connections (fixed in code)
 

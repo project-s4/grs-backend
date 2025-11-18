@@ -9,6 +9,7 @@ from app.core.security import get_current_user, decode_access_token
 import random
 from typing import Optional
 import json
+import uuid
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -122,9 +123,22 @@ def get_complaints(
     if department_id:
         query = query.filter(Complaint.department_id == department_id)
     if user_id:
-        query = query.filter(Complaint.user_id == user_id)
+        try:
+            # Convert string UUID to UUID object for comparison
+            user_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+            query = query.filter(Complaint.user_id == user_uuid)
+        except (ValueError, AttributeError):
+            # Invalid UUID format, skip filtering
+            logger.warning(f"Invalid user_id format: {user_id}")
     if assigned_to:
-        query = query.filter(Complaint.assigned_to == assigned_to)
+        try:
+            # Convert string UUID to UUID object for comparison
+            assigned_uuid = uuid.UUID(assigned_to) if isinstance(assigned_to, str) else assigned_to
+            query = query.filter(Complaint.assigned_to == assigned_uuid)
+            logger.info(f"Filtering complaints by assigned_to: {assigned_uuid}")
+        except (ValueError, AttributeError) as e:
+            # Invalid UUID format, skip filtering
+            logger.warning(f"Invalid assigned_to format: {assigned_to}, error: {e}")
     
     total = query.count()
     results = query.offset(offset).limit(limit).all()
@@ -165,6 +179,35 @@ def get_complaints(
         }
         status_value = status_mapping.get(status_enum_value, status_enum_value.title())
         
+        # If user_name is not found from JOIN, try to fetch from database
+        if not user_name:
+            # First, try to look up by user_id if it exists
+            if user_id:
+                try:
+                    user_by_id = db.query(User).filter(User.id == user_id).first()
+                    if user_by_id:
+                        user_name = user_by_id.name
+                        user_email = user_by_id.email or user_email
+                        user_phone = user_by_id.phone or user_phone
+                        logger.info(f"Found user by user_id: {user_name} ({user_email})")
+                except Exception as e:
+                    logger.warning(f"Error looking up user by user_id {user_id}: {e}")
+            
+            # If still not found, try to get email from metadata and look up by email
+            if not user_name:
+                metadata_email = parsed_metadata.get("email")
+                if metadata_email:
+                    try:
+                        user_by_email = db.query(User).filter(User.email == metadata_email).first()
+                        if user_by_email:
+                            user_name = user_by_email.name
+                            user_email = user_by_email.email
+                            user_phone = user_by_email.phone or user_phone
+                            logger.info(f"Found user by email from metadata: {user_name} ({user_email})")
+                    except Exception as e:
+                        logger.warning(f"Error looking up user by email {metadata_email}: {e}")
+        
+        # Fallback to metadata if still no user info
         citizen_name = user_name or parsed_metadata.get("name") or parsed_metadata.get("user_name") or parsed_metadata.get("citizen_name")
         citizen_email = user_email or parsed_metadata.get("email")
         citizen_phone = user_phone or parsed_metadata.get("phone") or parsed_metadata.get("contact") or parsed_metadata.get("mobile")
@@ -228,6 +271,23 @@ def track_complaint(
                     if current_user:
                         user = current_user
     
+    # If still no user, try to look up by email from metadata
+    if not user and complaint.complaint_metadata:
+        try:
+            metadata = complaint.complaint_metadata
+            if isinstance(metadata, dict):
+                metadata_email = metadata.get("email")
+            else:
+                metadata = json.loads(metadata) if metadata else {}
+                metadata_email = metadata.get("email")
+            
+            if metadata_email:
+                user = db.query(User).filter(User.email == metadata_email).first()
+                if user:
+                    logger.info(f"Found user by email from metadata: {user.name} ({user.email})")
+        except Exception as e:
+            logger.warning(f"Error looking up user by email from metadata: {e}")
+    
     # Get department information
     department = db.query(Department).filter(Department.id == complaint.department_id).first()
     
@@ -253,6 +313,87 @@ def track_complaint(
     }
     
     return {"success": True, "complaint": mapped_complaint}
+
+@router.get("/complaints/{complaint_id}")
+def get_complaint(
+    complaint_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get a single complaint by ID"""
+    from sqlalchemy import cast, String
+    
+    complaint = db.query(
+        Complaint.id,
+        Complaint.reference_no,
+        Complaint.title,
+        Complaint.description,
+        Complaint.category,
+        Complaint.complaint_metadata,
+        Complaint.created_at,
+        Complaint.department_id,
+        Complaint.user_id,
+        Complaint.assigned_to,
+        cast(Complaint.status, String).label('status_str'),
+        Department.name.label('department_name'),
+        User.name.label('user_name'),
+        User.email.label('user_email'),
+        User.phone.label('user_phone')
+    ).outerjoin(
+        Department, Complaint.department_id == Department.id
+    ).outerjoin(
+        User, Complaint.user_id == User.id
+    ).filter(Complaint.id == complaint_id).first()
+    
+    if not complaint:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+    
+    # Unpack the query result
+    (complaint_id_val, reference_no, title, description, category, 
+     complaint_metadata, created_at, department_id, user_id, 
+     assigned_to, status_str, dept_name, user_name, user_email, user_phone) = complaint
+    
+    # Parse metadata safely
+    parsed_metadata = {}
+    if complaint_metadata:
+        if isinstance(complaint_metadata, dict):
+            parsed_metadata = complaint_metadata
+        else:
+            try:
+                parsed_metadata = json.loads(complaint_metadata)
+            except (TypeError, ValueError):
+                parsed_metadata = {}
+    
+    # Map status enum to display value
+    status_enum_value = (status_str or "new").lower()
+    status_mapping = {
+        "new": "Pending",
+        "triaged": "Pending",
+        "in_progress": "In Progress",
+        "in-progress": "In Progress",
+        "resolved": "Resolved",
+        "escalated": "Pending",
+        "closed": "Resolved"
+    }
+    status_value = status_mapping.get(status_enum_value, status_enum_value.title())
+    
+    citizen_name = user_name or parsed_metadata.get("name") or parsed_metadata.get("user_name") or parsed_metadata.get("citizen_name")
+    citizen_email = user_email or parsed_metadata.get("email")
+    
+    return {
+        "id": str(complaint_id_val),
+        "reference_no": reference_no or "",
+        "tracking_id": reference_no or "",
+        "title": title or "",
+        "description": description or "",
+        "category": category or "General",
+        "status": status_value,
+        "department_id": str(department_id) if department_id else None,
+        "department_name": dept_name or "Unknown",
+        "user_name": citizen_name,
+        "user_email": citizen_email,
+        "created_at": created_at.isoformat() if created_at else "",
+        "updated_at": created_at.isoformat() if created_at else ""
+    }
 
 @router.patch("/complaints/{complaint_id}")
 def update_complaint(
