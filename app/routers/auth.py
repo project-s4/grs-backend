@@ -3,39 +3,105 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError, DatabaseError
 from pydantic import BaseModel
 from app.db.session import get_db
-from app.core.security import get_current_user
-from app.db.supabase import verify_supabase_token
-from app.schemas.users import UserProfileCreate, UserResponse
+from app.core.security import get_current_user, create_access_token
+from app.schemas.users import UserResponse
 from app.models.models import User, UserRole
 import uuid
 import logging
+import secrets
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
 class TokenRequest(BaseModel):
     token: str
 
+@router.post("/login")
+async def login(request: LoginRequest, db: Session = Depends(get_db)):
+    """Simple mock login - accepts any username/password."""
+    try:
+        # Mock authentication - accept any credentials
+        # Find or create user by username/email
+        user = db.query(User).filter(User.email == request.username).first()
+        
+        if not user:
+            # Create a mock user with default role
+            user = User(
+                id=uuid.uuid4(),
+                name=request.username,
+                email=request.username,
+                phone="",
+                role=UserRole.citizen,
+                supabase_user_id=uuid.uuid4()  # Generate a random UUID for mock auth
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        
+        # Generate a simple token
+        token = create_access_token(data={"sub": str(user.id), "email": user.email})
+        
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "user": UserResponse(
+                id=user.id,
+                name=user.name,
+                email=user.email,
+                phone=user.phone,
+                role=user.role,
+                supabase_user_id=user.supabase_user_id
+            )
+        }
+    except (OperationalError, DatabaseError) as e:
+        logger.error(f"Database error in login: {e}")
+        db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection error. Please check backend configuration."
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in login: {e}")
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred. Please try again."
+        )
+
 @router.post("/verify")
 async def verify_token(request: TokenRequest, db: Session = Depends(get_db)):
-    """Verify Supabase token and return user profile."""
+    """Verify token and return user profile."""
     try:
-        # Verify token with Supabase
-        supabase_user = verify_supabase_token(request.token)
-        if supabase_user is None:
+        from app.core.security import decode_access_token
+        
+        # Decode token
+        payload = decode_access_token(request.token)
+        if payload is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
-        # Find user in local database
-        user = db.query(User).filter(User.supabase_user_id == supabase_user["id"]).first()
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Find user in database
+        user = db.query(User).filter(User.id == uuid.UUID(user_id)).first()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User profile not found. Please complete registration."
+                detail="User not found"
             )
         
         return UserResponse(
@@ -59,62 +125,6 @@ async def verify_token(request: TokenRequest, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=500,
             detail="An error occurred. Please try again."
-        )
-
-@router.post("/create-profile", response_model=UserResponse)
-async def create_profile(profile: UserProfileCreate, db: Session = Depends(get_db)):
-    """Create user profile in local database after Supabase signup."""
-    try:
-        # Note: supabase_user_id is the UUID from Supabase Auth, not a token
-        # The frontend has already verified the user via OAuth, so we trust it
-        
-        # Check if user already exists
-        existing_user = db.query(User).filter(
-            (User.supabase_user_id == uuid.UUID(profile.supabase_user_id)) |
-            (User.email == profile.email)
-        ).first()
-        
-        if existing_user:
-            raise HTTPException(status_code=400, detail="User profile already exists")
-        
-        # Create new user profile
-        new_user = User(
-            id=uuid.uuid4(),
-            name=profile.name,
-            email=profile.email,
-            phone=profile.phone,
-            role=profile.role,
-            department_id=profile.department_id,
-            supabase_user_id=uuid.UUID(profile.supabase_user_id)
-        )
-        
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-        
-        return UserResponse(
-            id=new_user.id,
-            name=new_user.name,
-            phone=new_user.phone,
-            email=new_user.email,
-            role=new_user.role,
-            supabase_user_id=new_user.supabase_user_id
-        )
-    except HTTPException:
-        raise
-    except (OperationalError, DatabaseError) as e:
-        logger.error(f"Database error in create_profile: {e}")
-        db.rollback()
-        raise HTTPException(
-            status_code=503,
-            detail="Database connection error. Please check backend configuration."
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error in create_profile: {e}")
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail="An error occurred during profile creation. Please try again."
         )
 
 @router.get("/me", response_model=UserResponse)
