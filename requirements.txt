@@ -9,10 +9,10 @@ bcrypt<4.0.0  # Pin bcrypt to < 4.0.0 for passlib 1.7.4 compatibility
 pydantic[email]==2.8.2
 pydantic-settings>=2.4.0
 redis==5.0.1
-httpx==0.25.2
+httpx==0.24.1
 python-dotenv==1.0.0
 python-multipart==0.0.6
-supabase==2.3.4
+supabase==2.9.0
 google-generativeai==0.3.0
 langdetect==1.0.9
 pytest>=8.2
